@@ -1,0 +1,26 @@
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+.env.local
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Dependencies
+node_modules/
+.cargo/
+
+# Runtime
+*.o
+*.a
+*.so

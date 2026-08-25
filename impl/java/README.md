@@ -1,0 +1,259 @@
+# KeyCard - Java
+
+Java access control library inspired by CASL.js. Provides type-safe, composable authorization policies.
+
+## Features
+
+- **Type-safe**: Generics ensure only valid actions and subjects are used
+- **Composable**: Build complex policies from simple rules using fluent API
+- **Flexible conditions**: Support for comparison, pattern matching, and logical operators
+- **Cross-platform**: PolicyDefinitions serialize to JSON for cross-language use
+- **Zero runtime overhead**: Type safety enforced at compile-time via Java generics
+
+## Installation
+
+Add to your `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>com.cptnfizzbin</groupId>
+    <artifactId>keycard</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+Or with Gradle:
+
+```gradle
+implementation 'com.cptnfizzbin:keycard:0.1.0'
+```
+
+## Quick Start
+
+```java
+import com.cptnfizzbin.keycard.*;
+import java.util.Map;
+
+class Article {
+    public final int id;
+    public final int ownerId;
+    public final String status;
+
+    public Article(int id, int ownerId, String status) {
+        this.id = id;
+        this.ownerId = ownerId;
+        this.status = status;
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        // Define your actions
+        Action<String> create = ActionFactory.create("Create");
+        Action<String> update = ActionFactory.create("Update");
+        Action<String> delete = ActionFactory.create("Delete");
+
+        // Define your subjects
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+
+        // Build a policy
+        Policy policy = new PolicyBuilder()
+            .allow(create, article)
+            .allow(update, article, Map.of("ownerId", 1))
+            .deny(delete, article, Map.of("status", Map.of("$not", "archived")))
+            .build();
+
+        // Check by subject definition
+        if (policy.can(create, article)) {
+            System.out.println("✓ Can create articles");
+        }
+
+        // Check by subject reference
+        Article data = new Article(1, 1, "published");
+        SubjectRef<Article> ref = article.wrap(data);
+
+        if (policy.can(update, ref)) {
+            System.out.println("✓ Can update own article");
+        }
+
+        // Require permission (throws if denied)
+        try {
+            policy.require(delete, ref);
+        } catch (PolicyException e) {
+            System.out.println("Access denied: " + e.getMessage());
+        }
+    }
+}
+```
+
+## Type Safety
+
+Java's generic type system ensures compile-time verification:
+
+```java
+Action<String> create = ActionFactory.create("Create");
+SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+
+policy.can(create, article);        // ✓ OK
+policy.can("Create", article);      // ✗ Compiler error
+policy.can(create, "Article");      // ✗ Compiler error
+```
+
+## Condition Operators
+
+- `$eq` - Equality
+- `$gt` - Greater than
+- `$gte` - Greater than or equal
+- `$lt` - Less than
+- `$lte` - Less than or equal
+- `$in` - Value in collection
+- `$has` - Collection contains value
+- `$rgx` - Regex match
+- `$or` - Logical OR
+- `$and` - Logical AND
+- `$not` - Logical NOT
+- Field conditions - Check nested properties
+
+## API
+
+### ActionFactory
+
+Create type-safe actions:
+```java
+Action<String> create = ActionFactory.create("Create");
+```
+
+### SubjectFactory
+
+Create type-safe subject definitions:
+```java
+SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+```
+
+### SubjectDef<T>
+
+- `getName()` - Get subject name
+- `getType()` - Get subject class
+- `wrap(T obj)` - Create SubjectRef from object
+
+### SubjectRef<T>
+
+Reference to subject instance:
+- `getDefinition()` - Get SubjectDef
+- `getName()` - Get subject name
+- `getValue()` - Get wrapped object
+
+### PolicyBuilder
+
+Build policies with fluent API:
+- `allow(action, subject)` - Allow action
+- `allow(action, subject, conditions)` - Allow with conditions
+- `deny(action, subject)` - Deny action
+- `deny(action, subject, conditions)` - Deny with conditions
+- `build()` - Create Policy
+- `buildDefinition()` - Create PolicyDefinition
+
+### Policy
+
+Check permissions:
+- `can(action, subjectDef)` - Check by definition
+- `can(action, subjectRef)` - Check by reference
+- `cannot(action, subject)` - Check negation
+- `require(action, subject)` - Require permission (throws on denial)
+- `append(definition)` - Merge policies
+- `getDefinition()` - Get underlying definition
+
+### ConditionResolver
+
+Evaluates conditions:
+- `evaluate(subject, condition)` - Evaluate a condition
+
+### PolicyDefinition
+
+Serializable policy:
+- `getVersion()` - Get spec version
+- `getAllowRules()` - Get allow rules
+- `getDenyRules()` - Get deny rules
+
+### PolicyException
+
+Thrown when permission check fails with `require()`.
+
+## Examples
+
+### Schema-Only Check
+
+```java
+// Allow creating any article (no conditions needed)
+policy.can(Actions.Create, Subjects.Article);
+```
+
+### Condition-Based Check
+
+```java
+// Check if user can update THIS article (with conditions)
+Article data = new Article(1, userId, "published");
+SubjectRef<Article> ref = article.wrap(data);
+policy.can(Actions.Update, ref);
+```
+
+### Multiple Conditions
+
+```java
+new PolicyBuilder()
+    .allow(update, article, Map.of(
+        "$and", List.of(
+            Map.of("ownerId", userId),
+            Map.of("status", Map.of("$not", "archived"))
+        )
+    ))
+    .build();
+```
+
+### Custom Error Handling
+
+```java
+try {
+    policy.require(delete, article);
+} catch (PolicyException e) {
+    logger.warn("Access denied: {}", e.getMessage());
+    sendError(403, "You do not have permission to delete this article");
+}
+```
+
+## Cross-Language Usage
+
+Policies can be serialized with Gson and shared across languages:
+
+```java
+// Build policy in Java
+Policy policy = new PolicyBuilder()
+    .allow(create, article)
+    .build();
+
+// Serialize
+Gson gson = new Gson();
+String json = gson.toJson(policy.getDefinition());
+
+// Can be loaded in TypeScript, Rust, etc.
+```
+
+## Building and Testing
+
+Build with Maven:
+```bash
+mvn clean package
+mvn test
+```
+
+Run the example:
+```bash
+mvn exec:java -Dexec.mainClass="com.cptnfizzbin.keycard.Example"
+```
+
+## See Also
+
+- [SPEC.md](../SPEC.md) - Complete specification
+- [TYPE_SAFETY.md](../TYPE_SAFETY.md) - Type safety patterns
+- [node/README.md](../node/README.md) - TypeScript implementation
+- [rust/README.md](../rust/README.md) - Rust implementation

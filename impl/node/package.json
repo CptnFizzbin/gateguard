@@ -1,0 +1,33 @@
+{
+  "name": "@keycard/core",
+  "version": "0.1.0",
+  "description": "TypeScript access control library, strongly inspired by CASL.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "authorization",
+    "access-control",
+    "permissions",
+    "policy",
+    "security"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/ui": "^1.0.0",
+    "eslint": "^8.50.0",
+    "typescript": "^5.2.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}
