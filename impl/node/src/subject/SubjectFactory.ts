@@ -10,7 +10,7 @@ export function createSubject<TSubject>(name: string): SubjectDef<TSubject> {
         [Symbol.for("SubjectBrand")]: undefined as any,
         __name: name,
         value: obj,
-      };
+      } as unknown as SubjectRef<TSubject>;
     },
-  } as SubjectDef<TSubject>;
+  } as unknown as SubjectDef<TSubject>;
 }

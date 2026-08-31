@@ -23,8 +23,42 @@ public final class Policy {
         this.resolver = resolver != null ? resolver : new ConditionResolver();
     }
 
+    /**
+     * Builds a Policy from an already-parsed PolicyDefinition. KeyCard itself
+     * never reads or writes policy.yaml text - an application (or a test,
+     * via a YAML library of its own choosing) parses the file into a plain
+     * PolicyDefinition and hands it to KeyCard.
+     */
+    public static Policy from(PolicyDefinition definition) {
+        return new Policy(definition);
+    }
+
+    public static Policy from(PolicyDefinition definition, ConditionResolver resolver) {
+        return new Policy(definition, resolver);
+    }
+
+    /** Alias of {@link #from(PolicyDefinition)}. */
+    public static Policy fromDto(PolicyDefinition definition) {
+        return from(definition);
+    }
+
+    /** Alias of {@link #from(PolicyDefinition, ConditionResolver)}. */
+    public static Policy fromDto(PolicyDefinition definition, ConditionResolver resolver) {
+        return from(definition, resolver);
+    }
+
     public PolicyDefinition getDefinition() {
+        return toDefinition();
+    }
+
+    /** Returns the PolicyDefinition backing this policy. */
+    public PolicyDefinition toDefinition() {
         return definition;
+    }
+
+    /** Alias of {@link #toDefinition()}. */
+    public PolicyDefinition toDto() {
+        return toDefinition();
     }
 
     public <T> boolean can(Action<?> action, SubjectDef<T> subject) {
