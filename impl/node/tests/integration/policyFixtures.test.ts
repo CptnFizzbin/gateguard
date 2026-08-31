@@ -112,6 +112,6 @@ describe.each(fixtures)("policy fixture: $policyName", ({ policyPath, testPath }
       ? { ...testCase.subjectData, __name: testCase.subject }
       : testCase.subject;
 
-    expect(policy.can(testCase.action as any, subjectArg as any)).toBe(testCase.expected);
+    expect(policy.can(testCase.action, subjectArg)).toBe(testCase.expected);
   });
 });

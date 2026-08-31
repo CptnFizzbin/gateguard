@@ -33,21 +33,21 @@ describe("Fixture-based Policy Tests", () => {
       result.articles = {};
       for (const [key, value] of Object.entries(articlesData)) {
         // Add __name property to identify subject type for policy checking
-        result.articles[key] = { ...value as any, __name: "Article" };
+        result.articles[key] = { ...value, __name: "Article" };
       }
     }
     if (fs.existsSync(commentsPath)) {
       const commentsData = YAML.parse(fs.readFileSync(commentsPath, "utf-8")).comments;
       result.comments = {};
       for (const [key, value] of Object.entries(commentsData)) {
-        result.comments[key] = { ...value as any, __name: "Comment" };
+        result.comments[key] = { ...value, __name: "Comment" };
       }
     }
     if (fs.existsSync(usersPath)) {
       const usersData = YAML.parse(fs.readFileSync(usersPath, "utf-8")).users;
       result.users = {};
       for (const [key, value] of Object.entries(usersData)) {
-        result.users[key] = { ...value as any, __name: "User" };
+        result.users[key] = { ...value, __name: "User" };
       }
     }
 
@@ -71,17 +71,17 @@ describe("Fixture-based Policy Tests", () => {
     });
 
     test("allows Read on Article", () => {
-      expect(policy.can("Read" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Read", "Article")).toBe(true);
     });
 
     test("allows Create on Article for owner_id 1", () => {
       const article = objects.articles.article_1;
-      expect(policy.can("Create" as any, article)).toBe(true);
+      expect(policy.can("Create", article)).toBe(true);
     });
 
     test("denies Create for owner_id 2", () => {
       const article = objects.articles.article_3;
-      expect(policy.can("Create" as any, article)).toBe(false);
+      expect(policy.can("Create", article)).toBe(false);
     });
   });
 
@@ -96,27 +96,27 @@ describe("Fixture-based Policy Tests", () => {
     });
 
     test("allows Read on Article", () => {
-      expect(policy.can("Read" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Read", "Article")).toBe(true);
     });
 
     test("allows Update for owner", () => {
       const article = objects.articles.article_1;
-      expect(policy.can("Update" as any, article)).toBe(true);
+      expect(policy.can("Update", article)).toBe(true);
     });
 
     test("denies Update for non-owner", () => {
       const article = objects.articles.article_3;
-      expect(policy.can("Update" as any, article)).toBe(false);
+      expect(policy.can("Update", article)).toBe(false);
     });
 
     test("allows Delete for owner", () => {
       const article = objects.articles.article_1;
-      expect(policy.can("Delete" as any, article)).toBe(true);
+      expect(policy.can("Delete", article)).toBe(true);
     });
 
     test("denies Delete for non-owner", () => {
       const article = objects.articles.article_3;
-      expect(policy.can("Delete" as any, article)).toBe(false);
+      expect(policy.can("Delete", article)).toBe(false);
     });
   });
 
@@ -131,27 +131,27 @@ describe("Fixture-based Policy Tests", () => {
     });
 
     test("allows Read on Article", () => {
-      expect(policy.can("Read" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Read", "Article")).toBe(true);
     });
 
     test("allows Update for owner with non-archived status", () => {
       const article = objects.articles.article_1;
-      expect(policy.can("Update" as any, article)).toBe(true);
+      expect(policy.can("Update", article)).toBe(true);
     });
 
     test("denies Update for archived articles", () => {
       const article = objects.articles.article_3;
-      expect(policy.can("Update" as any, article)).toBe(false);
+      expect(policy.can("Update", article)).toBe(false);
     });
 
     test("denies Delete on archived articles", () => {
       const article = objects.articles.article_3;
-      expect(policy.can("Delete" as any, article)).toBe(false);
+      expect(policy.can("Delete", article)).toBe(false);
     });
 
     test("allows Delete on non-archived articles", () => {
       const article = objects.articles.article_1;
-      expect(policy.can("Delete" as any, article)).toBe(true);
+      expect(policy.can("Delete", article)).toBe(true);
     });
   });
 
@@ -166,35 +166,35 @@ describe("Fixture-based Policy Tests", () => {
     });
 
     test("allows Read on Article", () => {
-      expect(policy.can("Read" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Read", "Article")).toBe(true);
     });
 
     test("allows Read on Comment", () => {
-      expect(policy.can("Read" as any, "Comment" as any)).toBe(true);
+      expect(policy.can("Read", "Comment")).toBe(true);
     });
 
     test("allows Read on User", () => {
-      expect(policy.can("Read" as any, "User" as any)).toBe(true);
+      expect(policy.can("Read", "User")).toBe(true);
     });
 
     test("allows Update Comment for author", () => {
       const comment = objects.comments.comment_1;
-      expect(policy.can("Update" as any, comment)).toBe(true);
+      expect(policy.can("Update", comment)).toBe(true);
     });
 
     test("denies Update Comment for non-author", () => {
       const comment = objects.comments.comment_4;
-      expect(policy.can("Update" as any, comment)).toBe(false);
+      expect(policy.can("Update", comment)).toBe(false);
     });
 
     test("denies Delete User entirely", () => {
       const user = objects.users.user_1;
-      expect(policy.can("Delete" as any, user)).toBe(false);
+      expect(policy.can("Delete", user)).toBe(false);
     });
 
     test("denies Delete any user", () => {
       const user = objects.users.user_3;
-      expect(policy.can("Delete" as any, user)).toBe(false);
+      expect(policy.can("Delete", user)).toBe(false);
     });
   });
 
@@ -209,32 +209,32 @@ describe("Fixture-based Policy Tests", () => {
     });
 
     test("allows Read on Article", () => {
-      expect(policy.can("Read" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Read", "Article")).toBe(true);
     });
 
     test("allows Create on Article", () => {
-      expect(policy.can("Create" as any, "Article" as any)).toBe(true);
+      expect(policy.can("Create", "Article")).toBe(true);
     });
 
     test("allows Update for owner with draft/published status", () => {
       const article = objects.articles.article_2;
       expect(article.owner_id).toBe(1);
       expect(article.status).toBe("draft");
-      expect(policy.can("Update" as any, article)).toBe(true);
+      expect(policy.can("Update", article)).toBe(true);
     });
 
     test("allows Delete for owner with low view count", () => {
       const article = objects.articles.article_4;
       expect(article.owner_id).toBe(1);
       expect(article.view_count).toBe(50);
-      expect(policy.can("Delete" as any, article)).toBe(true);
+      expect(policy.can("Delete", article)).toBe(true);
     });
 
     test("denies Delete for published high-view articles", () => {
       const article = objects.articles.article_3;
       expect(article.view_count).toBe(2000);
       expect(article.status).toBe("archived");
-      expect(policy.can("Delete" as any, article)).toBe(false);
+      expect(policy.can("Delete", article)).toBe(false);
     });
 
     test("allows Publish for owner with valid title", () => {
@@ -242,13 +242,13 @@ describe("Fixture-based Policy Tests", () => {
       expect(article.owner_id).toBe(1);
       expect(article.status).toBe("draft");
       expect(article.title).toMatch(/^[A-Z]/);
-      expect(policy.can("Publish" as any, article)).toBe(true);
+      expect(policy.can("Publish", article)).toBe(true);
     });
 
     test("denies Publish for non-owner", () => {
       const article = objects.articles.article_5;
       expect(article.owner_id).toBe(3);
-      expect(policy.can("Publish" as any, article)).toBe(false);
+      expect(policy.can("Publish", article)).toBe(false);
     });
   });
 });

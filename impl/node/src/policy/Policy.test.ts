@@ -11,8 +11,8 @@ describe("Policy deny precedence", () => {
       },
     });
 
-    expect(policy.can("Delete" as any, "Article" as any)).toBe(false);
-    expect(policy.cannot("Delete" as any, "Article" as any)).toBe(true);
+    expect(policy.can("Delete", "Article")).toBe(false);
+    expect(policy.cannot("Delete", "Article")).toBe(true);
   });
 
   test("a conditional deny rule only overrides allow when its condition matches", () => {
@@ -24,8 +24,11 @@ describe("Policy deny precedence", () => {
       },
     });
 
-    expect(policy.can("Delete" as any, { __name: "Article", status: "archived" } as any)).toBe(false);
-    expect(policy.can("Delete" as any, { __name: "Article", status: "published" } as any)).toBe(true);
+    const archived = { __name: "Article", status: "archived" };
+    const published = { __name: "Article", status: "published" };
+
+    expect(policy.can("Delete", archived)).toBe(false);
+    expect(policy.can("Delete", published)).toBe(true);
   });
 
   test("append() cannot bypass a base policy's deny rule", () => {
@@ -41,6 +44,6 @@ describe("Policy deny precedence", () => {
     });
 
     // ...still doesn't bypass the base policy's deny.
-    expect(merged.can("Delete" as any, "User" as any)).toBe(false);
+    expect(merged.can("Delete", "User")).toBe(false);
   });
 });

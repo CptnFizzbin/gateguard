@@ -108,10 +108,7 @@ export class Policy<
     if (typeof subject === "string") {
       return subject;
     }
-    if ("__name" in subject) {
-      return subject.__name;
-    }
-    return (subject as any).constructor.name || "Unknown";
+    return subject.__name;
   }
 
   private getSubjectValue(subject: TSubjects[number] | SubjectDef | SubjectRef | string): any {

@@ -7,7 +7,7 @@ export class PolicyBuilder<
   TActions extends readonly Action[] = readonly Action[],
   TSubjects extends readonly Subject[] = readonly Subject[]
 > {
-  private rules: Rule[] = [];
+  private rules: Rule<TActions, TSubjects>[] = [];
 
   allow<T extends TActions[number]>(
     action: T,
@@ -42,13 +42,13 @@ export class PolicyBuilder<
   }
 
   buildDef(): PolicyDefinition<TActions, TSubjects> {
-    const allow: Array<[TActions[number], TSubjects[number] | SubjectDef | string, Condition?]> = [];
-    const deny: Array<[TActions[number], TSubjects[number] | SubjectDef | string, Condition?]> = [];
+    const allow: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]> = [];
+    const deny: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]> = [];
 
     for (const rule of this.rules) {
-      const tuple: [TActions[number], TSubjects[number] | SubjectDef | string, Condition?] = rule.conditions
-        ? [rule.action as any, rule.subject, rule.conditions]
-        : [rule.action as any, rule.subject];
+      const tuple: [TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?] = rule.conditions
+        ? [rule.action, rule.subject, rule.conditions]
+        : [rule.action, rule.subject];
 
       if (rule.inverted) {
         deny.push(tuple);
