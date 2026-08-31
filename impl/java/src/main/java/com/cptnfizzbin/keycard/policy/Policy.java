@@ -62,20 +62,24 @@ public final class Policy {
     }
 
     public <T> boolean can(Action<?> action, SubjectDef<T> subject) {
-        return checkPermission(action, subject.getName(), null, false);
+        return checkPermission(action, subject.getName(), null, false)
+            && !checkPermission(action, subject.getName(), null, true);
     }
 
     public <T> boolean can(Action<?> action, SubjectRef<T> subject) {
-        return checkPermission(action, subject.getName(), subject.getValue(), false);
+        return checkPermission(action, subject.getName(), subject.getValue(), false)
+            && !checkPermission(action, subject.getName(), subject.getValue(), true);
     }
 
     public boolean can(String action, String subject) {
-        return checkPermissionString(action, subject, null, false);
+        return checkPermissionString(action, subject, null, false)
+            && !checkPermissionString(action, subject, null, true);
     }
 
     public boolean can(String action, Object subject) {
         String subjectName = getSubjectNameFromObject(subject);
-        return checkPermissionString(action, subjectName, subject, false);
+        return checkPermissionString(action, subjectName, subject, false)
+            && !checkPermissionString(action, subjectName, subject, true);
     }
 
     public <T> boolean cannot(Action<?> action, SubjectDef<T> subject) {

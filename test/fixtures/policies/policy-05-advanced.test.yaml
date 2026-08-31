@@ -90,6 +90,17 @@ tests:
       view_count: 500
     expected: false
 
+  - name: "denies Delete for the owner due to the deny rule (high view count, published)"
+    action: Delete
+    subject: Article
+    subjectData:
+      id: 1
+      owner_id: 1
+      title: "Getting Started with Rust"
+      status: published
+      view_count: 1500
+    expected: false
+
   - name: "denies Delete for the owner when the article is archived"
     action: Delete
     subject: Article

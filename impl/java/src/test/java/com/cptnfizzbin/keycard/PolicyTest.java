@@ -14,6 +14,8 @@ import com.cptnfizzbin.keycard.errors.PolicyException;
 
 import static org.junit.Assert.*;
 
+import java.util.Map;
+
 public class PolicyTest {
     static class Article {
         public final int id;
@@ -91,6 +93,54 @@ public class PolicyTest {
             .build();
 
         policy.require(delete, article);
+    }
+
+    @Test
+    public void testDenyOverridesAllow() {
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Action<String> delete = ActionFactory.create("Delete");
+
+        Policy policy = new PolicyBuilder()
+            .allow(delete, article)
+            .deny(delete, article)
+            .build();
+
+        assertFalse(policy.can(delete, article));
+        assertTrue(policy.cannot(delete, article));
+    }
+
+    @Test
+    public void testDenyWithConditionOnlyOverridesWhenItMatches() {
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Action<String> delete = ActionFactory.create("Delete");
+
+        Policy policy = new PolicyBuilder()
+            .allow(delete, article)
+            .deny(delete, article, Map.of("status", "archived"))
+            .build();
+
+        assertFalse(policy.can(delete, article.wrap(new Article(1, 1, "archived"))));
+        assertTrue(policy.can(delete, article.wrap(new Article(1, 1, "published"))));
+    }
+
+    @Test
+    public void testAppendCannotBypassABaseDenyRule() {
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Action<String> delete = ActionFactory.create("Delete");
+
+        // A base policy that only denies deletion...
+        PolicyDefinition base = new PolicyBuilder()
+            .deny(delete, article)
+            .buildDef();
+
+        // ...merged with a policy that would otherwise allow it.
+        PolicyDefinition moreAllow = new PolicyBuilder()
+            .allow(delete, article)
+            .buildDef();
+
+        Policy policy = new Policy(base).append(moreAllow);
+
+        assertFalse(policy.can(delete, article));
     }
 
     @Test

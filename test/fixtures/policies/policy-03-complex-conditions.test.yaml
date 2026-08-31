@@ -80,7 +80,7 @@ tests:
       view_count: 10
     expected: true
 
-  - name: "denies Delete on an archived article"
+  - name: "denies Delete on an archived article (deny rule)"
     action: Delete
     subject: Article
     subjectData:

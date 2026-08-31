@@ -55,7 +55,11 @@ export class Policy<
   }
 
   can(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {
-    return this.checkPermission(action, subject, false);
+    if (!this.checkPermission(action, subject, false)) {
+      return false;
+    }
+    // A matching deny rule overrides a matching allow rule.
+    return !this.checkPermission(action, subject, true);
   }
 
   cannot(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {

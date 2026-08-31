@@ -107,7 +107,7 @@ tests:
       created_at: 2024-03-10
     expected: false
 
-  - name: "denies Delete User for any user (blanket deny, no allow rule)"
+  - name: "denies Delete User for any user (deny rule, no allow rule either)"
     action: Delete
     subject: User
     subjectData:
@@ -118,7 +118,7 @@ tests:
       created_at: 2024-01-01
     expected: false
 
-  - name: "denies Delete User even for an admin"
+  - name: "denies Delete User even for an admin (deny rule)"
     action: Delete
     subject: User
     subjectData:
