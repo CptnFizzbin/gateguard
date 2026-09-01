@@ -1,21 +1,21 @@
-name: Node
+name: JS
 
 on:
   push:
     branches: [main]
     paths:
-      - "impl/node/**"
+      - "impl/js/**"
       - "test/fixtures/**"
-      - ".github/workflows/node.yml"
+      - ".github/workflows/js.yml"
   pull_request:
     paths:
-      - "impl/node/**"
+      - "impl/js/**"
       - "test/fixtures/**"
-      - ".github/workflows/node.yml"
+      - ".github/workflows/js.yml"
 
 defaults:
   run:
-    working-directory: impl/node
+    working-directory: impl/js
 
 jobs:
   build-and-test:
