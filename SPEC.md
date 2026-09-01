@@ -5,6 +5,11 @@ KeyCard Spec
 - TypeSafe, Cross-Language
 - Define server-side, resolve client-side
 
+> This is an informal overview. For the normative v1 specification —
+> exact rule-evaluation semantics, the full condition-operator table, and
+> a catalogue of required edge-case behavior — see
+> [`docs/spec/v1.md`](docs/spec/v1.md).
+
 Glossary
 --------
 
@@ -66,7 +71,9 @@ Condition =
   | OrCondition = { $or: Condition[] } //=> Condition[].any(TSubject)
   | AndCondition = { $and: Condition[] } //=> Condition[].all(TSubject)
   | NotCondition = { $not: Condition } //=> !Condition(TSubject)
-  | FieldCondition = { [key]: Condition } | { $field: [key, Condition] } //=> Condition(TSubject[key])
+  | FieldCondition = { [key]: Condition } //=> Condition(TSubject[key])
+  // Note: an alternate `{ $field: [key, Condition] }` form was sketched
+  // here but is reserved/unimplemented as of v1 - see docs/spec/v1.md §7.5.
 
 Policy
 ------
