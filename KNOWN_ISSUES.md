@@ -75,17 +75,17 @@ None of the following exist in either implementation yet — all are new
 `Policy.from(...)`/`PolicyBuilder` requirements introduced by this
 revision, not existing behavior that's merely wrong:
 
-- **Malformed rule tuples MUST throw `PolicyLoadException`** (§2, EC-10).
+- **Malformed rule tuples **MUST** throw `PolicyLoadException`** (§2, EC-10).
   Currently unvalidated in both implementations.
-- **Catalog coverage MUST throw `PolicyLoadException`** when
+- **Catalog coverage **MUST** throw `PolicyLoadException`** when
   `meta.actions`/`meta.subjects`/`meta.customOperators` is declared and
   some rule references a name outside it (§2, EC-8, EC-13). Neither
   implementation has any concept of these catalogs yet.
-- **`version` incompatibility MUST throw `PolicyVersionException`**
+- **`version` incompatibility **MUST** throw `PolicyVersionException`**
   (§3, EC-11). Neither `Policy.from` (`impl/js/src/policy/Policy.ts`) nor
   the `Policy` constructor (`impl/java/.../policy/Policy.java`) checks
   `definition.version` at all today.
-- **A wildcard rule carrying a condition MUST throw** — see "No
+- **A wildcard rule carrying a condition **MUST** throw** — see "No
   enforcement that a wildcard rule is unconditional" above.
 
 ## `meta.customOperators` and custom-operator registration
@@ -117,8 +117,8 @@ revision, not existing behavior that's merely wrong:
   capture/extraction feature exists to make greedy/lazy observable).
 - **`$field` (long-form field access) doesn't exist in either
   implementation** (§7.4.11, §7.5). It's now required behavior: any
-  `$`-prefixed condition key MUST be treated as an operator, never a field
-  name — testing a field whose name starts with `$` MUST go through
+  `$`-prefixed condition key **MUST** be treated as an operator, never a field
+  name — testing a field whose name starts with `$` **MUST** go through
   `{ $field: [name, Condition] }`. Neither `ConditionResolver`
   implementation has special handling for `$field` today; a `$field` key
   currently just falls through as an unrecognized operator.
