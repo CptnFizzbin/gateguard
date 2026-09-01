@@ -20,6 +20,7 @@ npm install @cptnfizzbin/keycard
 
 ```typescript
 import { createAction, createSubject, PolicyBuilder, Policy } from '@cptnfizzbin/keycard';
+import type { InferActions, InferSubjects } from '@cptnfizzbin/keycard';
 
 // Define your action and subject types
 const Actions = {
@@ -32,18 +33,21 @@ const Subjects = {
   Article: createSubject<{ id: number; owner_id: number; status: string }>("Article"),
 } as const;
 
-type AppAction = typeof Actions[keyof typeof Actions];
-type AppSubject = typeof Subjects[keyof typeof Subjects];
+// InferActions/InferSubjects derive the readonly array types PolicyBuilder
+// and Policy expect, so you don't have to spell out
+// `typeof Actions[keyof typeof Actions]` by hand.
+type AppActions = InferActions<typeof Actions>;
+type AppSubjects = InferSubjects<typeof Subjects>;
 
 // Build a policy
-const policyDef = new PolicyBuilder<readonly AppAction[], readonly AppSubject[]>()
+const policyDef = new PolicyBuilder<AppActions, AppSubjects>()
   .allow(Actions.Create, Subjects.Article)
   .allow(Actions.Update, Subjects.Article, { owner_id: 1 })
   .deny(Actions.Delete, Subjects.Article, { status: { $not: "archived" } })
   .buildDef();
 
 // Create and use policy
-const policy = new Policy<readonly AppAction[], readonly AppSubject[]>(policyDef);
+const policy = new Policy<AppActions, AppSubjects>(policyDef);
 
 // Check by subject definition
 if (policy.can(Actions.Create, Subjects.Article)) {
@@ -92,6 +96,12 @@ Create a typed action.
 
 ### createSubject<TSubject>(name: string)
 Create a typed subject definition.
+
+### InferActions<T> / InferSubjects<T>
+Derive the `readonly Action[]` / `readonly Subject[]` types that `PolicyBuilder`
+and `Policy` expect from an actions or subjects map, e.g.
+`InferActions<typeof Actions>`, so callers don't have to write
+`typeof Actions[keyof typeof Actions]` by hand.
 
 ### PolicyBuilder<TActions, TSubjects>
 - `allow(action, subject, conditions?)` - Allow action

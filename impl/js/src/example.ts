@@ -1,4 +1,5 @@
 import { createAction, createSubject, PolicyBuilder, Policy } from "./index";
+import type { InferActions, InferSubjects } from "./index";
 
 // Define your action types
 const Actions = {
@@ -8,7 +9,7 @@ const Actions = {
   Delete: createAction("Delete"),
 } as const;
 
-type AppAction = typeof Actions[keyof typeof Actions];
+type AppActions = InferActions<typeof Actions>;
 
 // Define your subject types
 const Subjects = {
@@ -16,10 +17,10 @@ const Subjects = {
   ListItem: createSubject<{ id: number; title: string; owner_id: number }>("ListItem"),
 } as const;
 
-type AppSubject = typeof Subjects[keyof typeof Subjects];
+type AppSubjects = InferSubjects<typeof Subjects>;
 
 // Build a policy using the type-safe definitions
-const policyDef = new PolicyBuilder<readonly AppAction[], readonly AppSubject[]>()
+const policyDef = new PolicyBuilder<AppActions, AppSubjects>()
   .allow(Actions.Create, Subjects.Article)
   .allow(Actions.Read, Subjects.Article)
   .allow(Actions.Update, Subjects.Article, { owner_id: 1 })
@@ -27,7 +28,7 @@ const policyDef = new PolicyBuilder<readonly AppAction[], readonly AppSubject[]>
   .buildDef();
 
 // Create a policy instance
-const policy = new Policy<readonly AppAction[], readonly AppSubject[]>(policyDef);
+const policy = new Policy<AppActions, AppSubjects>(policyDef);
 
 // Type-safe permission checks
 const article = Subjects.Article.wrap({ id: 1, owner_id: 1, status: "published" });
