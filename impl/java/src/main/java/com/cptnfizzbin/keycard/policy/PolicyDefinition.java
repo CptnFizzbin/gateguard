@@ -1,5 +1,6 @@
 package com.cptnfizzbin.keycard.policy;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -18,6 +19,8 @@ public final class PolicyDefinition {
         this(version, null, null, allowRules, denyRules);
     }
 
+    // Hand-written: null-defaults and defensively copies allowRules/denyRules,
+    // which a generated @AllArgsConstructor wouldn't do.
     public PolicyDefinition(int version, String name, String description, List<Rule> allowRules, List<Rule> denyRules) {
         this.version = version;
         this.name = name;
@@ -26,10 +29,7 @@ public final class PolicyDefinition {
         this.denyRules = new ArrayList<>(denyRules != null ? denyRules : List.of());
     }
 
-    // getVersion/getName/getDescription come from @Data. getAllowRules/
-    // getDenyRules stay hand-written below since they defensively copy -
-    // @Data's plain getter would leak the mutable internal list.
-
+    // Hand-written: defensively copies, unlike a generated @Getter.
     public List<Rule> getAllowRules() {
         return List.copyOf(allowRules);
     }
@@ -38,10 +38,8 @@ public final class PolicyDefinition {
         return List.copyOf(denyRules);
     }
 
-    // Constructor and getters come entirely from @Data - no defensive
-    // copying is needed here (conditions is handed to the resolver as-is
-    // elsewhere too).
     @Data
+    @AllArgsConstructor
     public static final class Rule {
         private final String action;
         private final String subjectName;
