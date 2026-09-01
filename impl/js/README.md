@@ -1,6 +1,6 @@
-# KeyCard - TypeScript/Node.js
+# KeyCard - TypeScript/JavaScript
 
-TypeScript access control library inspired by CASL.js. Provides strongly-typed, composable authorization policies with compile-time safety for Actions and Subjects.
+TypeScript access control library inspired by CASL.js. Provides strongly-typed, composable authorization policies with compile-time safety for Actions and Subjects. Runs in the browser as well as server-side (Node.js and other JS runtimes).
 
 ## Features
 
@@ -13,13 +13,13 @@ TypeScript access control library inspired by CASL.js. Provides strongly-typed, 
 ## Installation
 
 ```bash
-npm install @keycard/core
+npm install @cptnfizzbin/keycard
 ```
 
 ## Quick Start
 
 ```typescript
-import { createAction, createSubject, PolicyBuilder, Policy } from '@keycard/core';
+import { createAction, createSubject, PolicyBuilder, Policy } from '@cptnfizzbin/keycard';
 
 // Define your action and subject types
 const Actions = {
