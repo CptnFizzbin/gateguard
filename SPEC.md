@@ -46,8 +46,11 @@ example:
 
 ```yaml
 version: 1 # KeyCard policy spec version
-actions: [Create, Update, Delete, anyAction]
-subjects: [Article, anySubject]
+meta:
+  anyAction: anyAction
+  anySubject: anySubject
+  actions: [Create, Update, Delete, anyAction]
+  subjects: [Article, anySubject]
 rules:
   - [allow, Create, Article] # Allow to create any article
   - [allow, Update, Article, { owner_id: 1 }] # Allowed to update articles they own
@@ -56,8 +59,11 @@ rules:
 
 `rules` is a single, order-significant list: the *last* rule that matches
 an action/subject/condition wins (CASL.js-style), not "any deny beats any
-allow." See [`docs/spec/v1.md`](docs/spec/v1.md) §6 for the exact
-algorithm, and §4/§5 for the `anyAction`/`anySubject` wildcards.
+allow." `anyAction`/`anySubject` aren't fixed reserved words - they're
+just the wildcard token strings this policy happens to declare in `meta`;
+a policy that declares no `meta.anyAction`/`meta.anySubject` has no
+wildcard mechanism at all. See [`docs/spec/v1.md`](docs/spec/v1.md) §6 for
+the exact algorithm, and §2/§4/§5 for `meta` and the wildcards.
 
 Condition
 ---------
