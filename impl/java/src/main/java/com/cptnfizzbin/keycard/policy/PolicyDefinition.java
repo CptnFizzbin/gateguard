@@ -26,17 +26,9 @@ public final class PolicyDefinition {
         this.denyRules = new ArrayList<>(denyRules != null ? denyRules : List.of());
     }
 
-    public int getVersion() {
-        return version;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
+    // getVersion/getName/getDescription come from @Data. getAllowRules/
+    // getDenyRules stay hand-written below since they defensively copy -
+    // @Data's plain getter would leak the mutable internal list.
 
     public List<Rule> getAllowRules() {
         return List.copyOf(allowRules);
@@ -46,28 +38,13 @@ public final class PolicyDefinition {
         return List.copyOf(denyRules);
     }
 
+    // Constructor and getters come entirely from @Data - no defensive
+    // copying is needed here (conditions is handed to the resolver as-is
+    // elsewhere too).
     @Data
     public static final class Rule {
         private final String action;
         private final String subjectName;
         private final Map<String, Object> conditions;
-
-        public Rule(String action, String subjectName, Map<String, Object> conditions) {
-            this.action = action;
-            this.subjectName = subjectName;
-            this.conditions = conditions;
-        }
-
-        public String getAction() {
-            return action;
-        }
-
-        public String getSubjectName() {
-            return subjectName;
-        }
-
-        public Map<String, Object> getConditions() {
-            return conditions;
-        }
     }
 }
