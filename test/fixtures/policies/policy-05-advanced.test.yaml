@@ -1,17 +1,3 @@
-# Test cases for policy-05-advanced.yaml
-#
-# Each test exercises `policy.can(action, subject)` (optionally with a
-# concrete `subjectData` instance to evaluate rule conditions against) and
-# asserts the boolean result KeyCard should return.
-#
-# Fields:
-#   name        - human readable description of the case
-#   action      - the action being checked
-#   subject     - the subject type name being checked
-#   subjectData - (optional) the object instance to check conditions against;
-#                 omitted when the check is against the bare subject type
-#   expected    - the expected result of policy.can(action, subject[, subjectData])
-
 version: 1
 policy: policy-05-advanced.yaml
 tests:
