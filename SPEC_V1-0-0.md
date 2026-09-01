@@ -102,9 +102,14 @@ rules:
   - [ Effect, Action, Subject, Conditions? ]
 ```
 
-### 3.1 header fields
+### 3.1 Header fields
 
-- To be added
+- `version` — **REQUIRED**. A SemVer string (`MAJOR.MINOR.PATCH`); see §2 for
+  the full versioning and compatibility rules.
+- `name` — **OPTIONAL**. A human-readable name for the policy. Informational
+  only — it plays no role in evaluation.
+- `description` — **OPTIONAL**. A human-readable description of the policy.
+  Informational only — it plays no role in evaluation.
 
 ### 3.2 meta fields
 
@@ -113,7 +118,7 @@ following fields are **OPTIONAL** as well.
 
 #### 3.2.1 `meta.anyAction` / `meta.anySubject`
 
-The wildcard tokens (§4, §5) for the policy. Implimentations **MUST** default to
+The wildcard tokens (§4, §5) for the policy. Implementations **MUST** default to
 the literal string `"_ANY_"` when not declared. A policy **MAY** override either
 to a different string, and **MAY** declare one without the other. Either **MAY**
 instead be explicitly set to `null` to disable the wildcard mechanism for that
@@ -123,13 +128,15 @@ tested literally, including the default wildcard string `"_ANY_"`.
 #### 3.2.2 `meta.actions` / `meta.subjects`
 
 The full set of action names and subject names this policy's rules use. When
-declared, they are enforced, not advisory**. When constructing a Policy from,
-implimenations **MUST** throw a `PolicyLoadException` if some rule's action
+declared, they are **enforced, not advisory**: when constructing a `Policy`,
+implementations **MUST** throw a `PolicyLoadException` if some rule's action
 isn't `meta.anyAction` and isn't listed in `meta.actions`
 (symmetrically for subjects/`meta.subjects`). See EC-8.
 
-The wildcard token **SHOULD** be excluded from the catalog; It **MUST** always
-recognized regardless of whether it's listed.
+The wildcard token **SHOULD NOT** be excluded from the catalog, though doing
+so remains valid — it **MUST** always be recognized regardless of whether
+it's listed; including it simply documents to a reader that this policy
+relies on the wildcard.
 
 A name listed in the catalog that no rule actually uses **MUST NOT**
 be treated as an issue. These catalogs describe the vocabulary a policy is
@@ -140,9 +147,9 @@ names that rule doesn't literally mention.
 
 Implementations **MAY** trim a declared catalog down to only the subset of names
 a policy's rules actually use (e.g. when a tool regenerates or re-serializes a
-`PolicyDefinition`)
+`PolicyDefinition`).
 
-#### 3.2.3 `meta.customOperators` / `meta.subjects`
+#### 3.2.3 `meta.customOperators`
 
 A declarative catalog of the custom `$`-prefixed condition operator names (e. g.
 `"$hasRole"`) this policy's rules use, enforced the same way as `meta.actions`/
@@ -153,8 +160,8 @@ executable checker.
 The operator's behavior must be supplied separately by the host application,
 through whatever runtime custom-condition-registration mechanism the
 implementation exposes (e.g. the JS `CustomConditionChecker` map passed to
-`Policy.from`). See §7.4.12, EC-13, EC-15. During construction, Implementations
-**MUST** throw an `PolicyLoadException` if a behaviour is not provided to the
+`Policy.from`). See §7.4.12, EC-13, EC-15. During construction, implementations
+**MUST** throw a `PolicyLoadException` if a behavior is not provided to the
 constructor.
 
 A policy **SHOULD** include `meta.customOperators` whenever any rule uses a
@@ -254,7 +261,7 @@ function can (action, subject) {
       return effect == 'allow'
     }
 
-    return effect
+    return effect == 'allow'
   }
 
   return false // nothing matched: default deny
