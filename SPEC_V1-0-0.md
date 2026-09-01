@@ -5,19 +5,18 @@ Status: Normative for `version` `1.x.x` policy documents (§3).
 This document is the authoritative definition of the `PolicyDefinition`
 format and its evaluation semantics for the v1 line. `SPEC.md` at the
 repository root remains the informal overview; `GLOSSARY.md` holds term
-definitions; `KNOWN_ISSUES.md` tracks where the JS (`impl/js`) and Java
-(`impl/java`) implementations currently diverge from what's specified here.
-Where any of those disagree with this document, this document wins.
+definitions. Where either of those disagrees with this document, this
+document wins.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY**
 are to be interpreted as in [RFC 2119](https://www.ietf.org/rfc/rfc2119.txt).
 
 ## 1. Scope
 
-KeyCard does not read or write policy files. An application (or a test, via
-whatever YAML/JSON library it chooses) parses a document into a plain
-`PolicyDefinition` value and hands it to `Policy.from(...)`. This spec
-defines:
+KeyCard MUST NOT read or write policy files itself. An application (or a
+test, via whatever YAML/JSON library it chooses) parses a document into a
+plain `PolicyDefinition` value and hands it to `Policy.from(...)`. This
+spec defines:
 
 - The shape of a `PolicyDefinition` (§2) and its `version` field (§3).
 - What an action and a subject are, and how they're matched, including the
@@ -32,11 +31,6 @@ implementation concerns layered on top of this. The one exception is §6's
 wildcard-condition constraint, which a builder MUST validate eagerly; see
 §6 and §8 (EC-6).
 
-`Policy.append()` is out of scope for v1 — dropped from this revision.
-A future MINOR or MAJOR version (§3) may reintroduce a rule-composition
-mechanism; until then, a `Policy` is built from exactly one
-`PolicyDefinition`.
-
 ## 2. Document structure
 
 ```yaml
@@ -45,8 +39,8 @@ name: string                        # optional, informational only
 description: string                 # optional, informational only
 
 meta:                               # optional
-  anyAction: string                 # optional, defaults to "_ANY_" — see §4
-  anySubject: string                # optional, defaults to "_ANY_" — see §5
+  anyAction: string | null          # optional, defaults to "_ANY_" — see §4
+  anySubject: string | null         # optional, defaults to "_ANY_" — see §5
   actions: string[]                 # optional catalog — see §4
   subjects: string[]                # optional catalog — see §5
   customOperators: string[]         # optional catalog — see §7.4.12
@@ -67,31 +61,43 @@ rules:
   3 elements), or an `Effect` that isn't `"allow"`/`"deny"`, is malformed.
   `Policy.from(...)` (or any equivalent construction entry point) MUST
   throw a `PolicyLoadException` when given a definition containing a
-  malformed rule tuple — it MUST NOT silently drop or ignore it. Producing
-  malformed tuples in the first place is a bug in the code that built the
-  `PolicyDefinition`, but detecting it is `Policy.from`'s job, not
-  something deferred to evaluation time. See EC-10.
+  malformed rule tuple — it MUST NOT silently drop or ignore it.
+  Detecting this is `Policy.from`'s job, not something deferred to
+  evaluation time. See EC-10.
 - `meta` is an entirely optional object grouping five independent,
   optional fields:
   - `meta.anyAction` / `meta.anySubject` — the wildcard tokens (§4, §5).
     Each defaults to the literal string `"_ANY_"` when not declared — a
     policy always has a working wildcard mechanism, whether or not `meta`
     says anything about it. A policy MAY override either to a different
-    string, and MAY declare one without the other.
+    string, and MAY declare one without the other. Either MAY instead be
+    explicitly set to `null` to **disable** the wildcard mechanism for
+    that position entirely — with `null`, no action (or subject) value
+    acts as a wildcard, and every rule's `Action` (or `Subject`) is
+    matched purely literally, including the string `"_ANY_"` itself. This
+    is distinct from simply omitting the field, which enables the
+    `"_ANY_"` default.
   - `meta.actions` / `meta.subjects` — declarative catalogs: the full set
     of action names and subject names this policy's rules use.
     **When declared, they are enforced, not advisory**: `Policy.from(...)`
     MUST throw a `PolicyLoadException` if some rule's action isn't
     `meta.anyAction` and isn't listed in `meta.actions` (symmetrically for
     subjects/`meta.subjects`). See EC-8.
-    - The wildcard token itself MAY be excluded from the catalog — it's
-      always valid regardless of whether it's listed.
+    - The wildcard token itself SHOULD NOT be excluded from the catalog,
+      though doing so remains valid — it's always recognized regardless
+      of whether it's listed; including it simply documents to a reader
+      that this policy relies on the wildcard.
     - A name listed in the catalog that no rule actually uses MUST NOT be
       treated as an issue — catalogs describe the vocabulary a policy is
       allowed to use, not a requirement that every entry be exercised. A
       superuser policy consisting only of `[allow, _ANY_, _ANY_]` is
       valid even if `meta.actions`/`meta.subjects` separately enumerate a
       long list of specific names that rule doesn't literally mention.
+    - Implementations MAY trim a declared catalog down to only the subset
+      of names a policy's rules actually use (e.g. when a tool
+      regenerates or re-serializes a `PolicyDefinition`) — since an
+      unused entry is never an error (above), removing one changes
+      nothing observable.
   - `meta.customOperators` — a declarative catalog of the custom
     `$`-prefixed condition operator names (e.g. `"$hasRole"`) this
     policy's rules use, enforced the same way as `meta.actions`/
@@ -101,7 +107,12 @@ rules:
     still MUST be supplied separately, by the host application, through
     whatever runtime custom-condition-registration mechanism the
     implementation exposes (e.g. the JS `CustomConditionChecker` map
-    passed to `Policy.from`). See §7.4.12, EC-13, EC-15.
+    passed to `Policy.from`). See §7.4.12, EC-13, EC-15. A policy SHOULD
+    include `meta.customOperators` whenever any rule uses a custom
+    operator — unlike `meta.actions`/`meta.subjects`, this catalog is the
+    only place a reader can discover which external checkers the host
+    application needs to register, so declaring it matters more here than
+    for the other two catalogs.
   - Any of the five fields, or `meta` itself, may be absent; each is
     independent of the others.
 
@@ -110,28 +121,33 @@ rules:
 `version` is a [SemVer](https://semver.org/) string, `MAJOR.MINOR.PATCH`
 (e.g. `"1.0.0"`). This document specifies `1.0.0`.
 
-- **MAJOR** identifies a breaking change — one where a document valid and
-  meaningful under the old MAJOR version could parse differently, mean
+- **`MAJOR`** identifies a breaking change — one where a document valid and
+  meaningful under the old `MAJOR` version could parse differently, mean
   something different, or become invalid under the new one. Implementations
-  MAY provide support for a different MAJOR version than the one they
+  MAY provide support for a different `MAJOR` version than the one they
   primarily target (e.g. a 2.x implementation MAY still understand 1.x
   documents), but this is optional. If an implementation does not support
-  a document's MAJOR version — whether older or newer than what it
+  a document's `MAJOR` version — whether older or newer than what it
   implements — it MUST throw a `PolicyVersionException` at construction
   time rather than guess at compatibility.
-- **MINOR** identifies a backward-compatible addition (a new optional
+- **`MINOR`** identifies a backward-compatible addition (a new optional
   field, a new operator, a new default) that doesn't change the meaning of
   any document that didn't use the new feature. Implementations MUST
-  support every MINOR version lower than or equal to the one they
-  implement, within the same MAJOR version — an implementation of 1.5.0
+  support every `MINOR` version lower than or equal to the one they
+  implement, within the same `MAJOR` version — an implementation of 1.5.0
   MUST correctly evaluate a document declaring anywhere from 1.0.0 through
-  1.5.0. A document declaring a MINOR version the implementation doesn't
-  know yet (higher than what it implements, within the same MAJOR) MUST
+  1.5.0. A document declaring a `MINOR` version the implementation doesn't
+  know yet (higher than what it implements, within the same `MAJOR`) MUST
   cause a `PolicyVersionException` at construction time.
-- **PATCH** identifies changes to this specification document that don't
+- **`PATCH`** identifies changes to this specification document that don't
   affect normative behavior at all (wording clarifications, typo fixes,
-  added examples). Implementations MUST ignore PATCH when deciding
-  compatibility — `"1.0.0"` and `"1.0.7"` MUST be treated identically.
+  added examples). Implementations MUST ignore `PATCH` when deciding
+  compatibility — `"1.0.0"` and `"1.0.7"` MUST be treated identically. A
+  bugfix that merely brings a previously-noncompliant *implementation*
+  into alignment with already-published normative behavior MAY be
+  released under that implementation's own `PATCH` version — it isn't a
+  spec-level change at all, since the corrected behavior was already
+  required.
 - An implementation MUST stamp its own supported version — not merely
   echo an input document's version — whenever it serializes a
   `PolicyDefinition` it produced or assembled (e.g. `PolicyBuilder.buildDef()`
@@ -139,21 +155,21 @@ rules:
 
 See EC-11 for the exception-throwing behavior in full.
 
-### 3.1 What counts as a MAJOR, MINOR, or PATCH change to this spec
+### 3.1 What counts as a `MAJOR`, `MINOR`, or `PATCH` change to this spec
 
 This subsection governs how *this specification* is versioned from release
 to release — guidance for spec maintainers, not something an
 implementation checks at runtime.
 
-- **MAJOR**: any change that could alter the allow/deny outcome for some
-  already-valid document under the current MAJOR version, or that makes a
+- **`MAJOR`**: any change that could alter the allow/deny outcome for some
+  already-valid document under the current `MAJOR` version, or that makes a
   previously-valid document invalid (removing a field, operator, or
   matching guarantee; narrowing what was previously valid; changing a
   default).
-- **MINOR**: any purely additive change — a new optional field, a new
+- **`MINOR`**: any purely additive change — a new optional field, a new
   operator, new advisory (SHOULD/MAY) guidance — that cannot alter the
   outcome for any document that doesn't use the new feature.
-- **PATCH**: wording-only changes with zero effect on any implementation's
+- **`PATCH`**: wording-only changes with zero effect on any implementation's
   behavior (typo fixes, clarified examples, added cross-references).
 
 ## 4. Actions
@@ -167,7 +183,10 @@ An action is a string naming what the caller wants to do (`Read`, `Create`,
   rule's `Action` position, is a wildcard matching every action. It
   defaults to `"_ANY_"` when `meta`/`meta.anyAction` is absent — every
   policy has a working action wildcard, whether or not it says anything
-  about it in `meta`.
+  about it in `meta`. `meta.anyAction` MAY instead be explicitly `null`,
+  which disables the action wildcard entirely: no string, including
+  `"_ANY_"`, has special meaning, and every rule's `Action` is matched
+  purely literally.
 - Whatever string is currently `meta.anyAction`'s effective value (declared
   or defaulted) MUST NOT be used as an ordinary action name within that
   policy — a rule meaning the literal action equal to that value is
@@ -197,8 +216,8 @@ Three shapes may be passed to `can`/`cannot`/`require` as the subject:
 - `meta.anySubject` (§2) names the one string that, when it appears in a
   rule's `Subject` position, is a wildcard matching every subject name —
   symmetric with `meta.anyAction` (§4) in every respect, including the
-  `"_ANY_"` default and the reservation of whatever value is currently in
-  effect.
+  `"_ANY_"` default, the `null`-to-disable option, and the reservation of
+  whatever value is currently in effect.
 - As with actions, a policy SHOULD declare its full set via the optional
   `meta.subjects` catalog, and MUST do so if it wants unlisted subjects
   rejected at construction time (see EC-8).
@@ -234,8 +253,17 @@ matchesAction(action, ruleAction):
 matchesSubject(name, ruleSubject):
     return name == ruleSubject or ruleSubject == effectiveAnySubject(meta)
 
-effectiveAnyAction(meta):  return meta?.anyAction  ?? "_ANY_"
-effectiveAnySubject(meta): return meta?.anySubject ?? "_ANY_"
+# meta.anyAction/meta.anySubject: absent -> "_ANY_" default;
+# an explicit string -> that string; explicit null -> DISABLED (a
+# sentinel no rule's Action/Subject can ever equal, so the wildcard
+# branch of matchesAction/matchesSubject above never succeeds).
+effectiveAnyAction(meta):
+    if meta?.anyAction is explicitly null: return DISABLED
+    return meta?.anyAction ?? "_ANY_"
+
+effectiveAnySubject(meta):
+    if meta?.anySubject is explicitly null: return DISABLED
+    return meta?.anySubject ?? "_ANY_"
 ```
 
 An implementation MAY implement this algorithm differently (an index by
@@ -270,20 +298,29 @@ implementation:
    consult *this policy's own* effective `anyAction`/`anySubject` (§4, §5) —
    there is no wildcard token independent of what a given policy declares
    or defaults to.
-5. **A wildcard rule MUST be unconditional.** A rule whose `Action` is the
-   policy's effective `anyAction`, or whose `Subject` is its effective
-   `anySubject`, MUST NOT carry a `Conditions` element. `Policy.from(...)`
-   MUST throw a `PolicyLoadException` when given a definition violating
-   this; a `PolicyBuilder`'s `allow()`/`deny()` methods (or equivalent)
-   MUST throw an argument-error exception (e.g. `IllegalArgumentException`
-   in Java, a thrown `Error` subtype in JS) immediately when called with a
-   wildcard action or subject together with a non-empty condition, rather
-   than waiting for eventual construction to catch it. See EC-6.
+5. **A rule wildcarded on both sides MUST be unconditional.** A rule whose
+   `Action` is the policy's effective `anyAction` **and** whose `Subject`
+   is its effective `anySubject` MUST NOT carry a `Conditions` element.
+   `Policy.from(...)` MUST throw a `PolicyLoadException` when given a
+   definition violating this; a `PolicyBuilder`'s `allow()`/`deny()`
+   methods (or equivalent) MUST throw an argument-error exception (e.g.
+   `IllegalArgumentException` in Java, a thrown `Error` subtype in JS)
+   immediately when called this way, rather than waiting for eventual
+   construction to catch it. A rule wildcarded on only *one* side MAY
+   carry a condition: `[effect, anyAction, Subject, Conditions]`
+   (wildcard action, concrete subject) is unrestricted, since `Conditions`
+   evaluates against that concretely-known subject type's data;
+   `[effect, Action, anySubject, Conditions]` (concrete action, wildcard
+   subject) is valid but SHOULD NOT be used, since `Conditions` may then
+   be evaluated against subjects of many unrelated shapes and silently
+   fail to match some of them via §7.3's missing-field handling, rather
+   than failing loudly — a type-safety hazard, not a correctness one. See
+   EC-6.
 
 Broad rules are typically declared first, and later, more specific rules
 override them for the cases they cover — including a later `allow`
 reopening something an earlier `deny` closed. Because only one rule ever
-decides the outcome, authors relying on this model MUST order overriding
+decides the outcome, a policy relying on this model MUST order overriding
 rules after the rules they're meant to override; implementation
 documentation SHOULD encourage this convention explicitly. See EC-3 and
 EC-5 for the practical consequences.
@@ -317,15 +354,15 @@ operators these are, in each operator's own Requirements list). When
 evaluation hits one of these, the implementation MUST write a
 human-readable, error-level diagnostic to the console (or equivalent
 host-language error/logger channel) identifying the operator and what went
-wrong, so a policy author can find their mistake — but it still MUST
-resolve that condition to `false` and SHOULD NOT throw an exception.
-"Console error but no throw" is the required combination: silently
-returning `false` with no diagnostic hides real authoring bugs (a `$gt`
-compared against a string, a malformed `$substr` pattern) as if they were
-ordinary non-matches; throwing would violate the invariant above and take
-down every `can()` call that happens to hit the bad rule, for every
-request, until someone reads a stack trace. A logged, non-fatal diagnostic
-gets the bug noticed without making it load-bearing.
+wrong, so the mistake is easy to find — but it still MUST resolve that
+condition to `false` and SHOULD NOT throw an exception. "Console error but
+no throw" is the required combination: silently returning `false` with no
+diagnostic hides real bugs (a `$gt` compared against a string, a malformed
+`$substr` pattern) as if they were ordinary non-matches; throwing would
+violate the invariant above and take down every `can()` call that happens
+to hit the bad rule, for every request, until someone reads a stack trace.
+A logged, non-fatal diagnostic gets the bug noticed without making it
+load-bearing.
 
 This diagnostic requirement is distinct from — and MUST NOT be conflated
 with — an ordinary non-match that isn't a type issue: a missing field
@@ -470,15 +507,6 @@ Requirements:
   type issue — it MUST NOT itself produce the diagnostic (only a
   structurally invalid pattern does).
 
-`$rgx`/regular-expression matching is intentionally **not** part of v1 —
-exposing each host language's native regex engine directly would make
-policies behave subtly differently across implementations (different
-flavors, different Unicode handling, different catastrophic-backtracking
-characteristics). `$substr`'s four-token language is deliberately small
-enough to give every implementation identical, unambiguous behavior. A
-future MINOR or MAJOR version may reconsider a full-regex operator once a
-specific, cross-language-safe subset is chosen.
-
 #### 7.4.7 `$or`
 
 `{ $or: Condition[] }`. Matches when at least one sub-condition matches.
@@ -488,8 +516,10 @@ Requirements:
 - If it is not an array, the condition MUST evaluate to `false` and MUST
   produce the §7.1 console diagnostic (type issue).
 - `{ $or: [] }` MUST evaluate to `false` (vacuously — no alternative can be
-  satisfied). An empty array is a well-formed operand, not a type issue —
-  it MUST NOT itself produce the diagnostic.
+  satisfied), and SHOULD produce the §7.1 diagnostic — an empty `$or` is
+  well-formed, but is far more often an authoring mistake (e.g. a
+  programmatically-built list that ended up empty) than a deliberate
+  always-false condition.
 
 #### 7.4.8 `$and`
 
@@ -500,8 +530,8 @@ Requirements:
 - If it is not an array, the condition MUST evaluate to `false` and MUST
   produce the §7.1 console diagnostic (type issue).
 - `{ $and: [] }` MUST evaluate to `true` (vacuously — there is no
-  unsatisfied conjunct). An empty array is a well-formed operand, not a
-  type issue — it MUST NOT itself produce the diagnostic.
+  unsatisfied conjunct), and SHOULD produce the §7.1 diagnostic, for the
+  same reason as `$or: []` above.
 
 #### 7.4.9 `$not`
 
@@ -513,6 +543,11 @@ Requirements:
 - No notion of a type mismatch — it always has exactly one well-formed
   nested condition to evaluate; any type issue surfaces from that nested
   evaluation itself, not from `$not`.
+
+Across §7.4.1–§7.4.9: any type mismatch MUST always resolve to `false`,
+with the sole exception of a missing or `null` field (§7.3 — absence is
+not a mismatch, and MUST NOT itself produce a diagnostic). Every genuine
+type mismatch MUST display the §7.1 diagnostic message.
 
 #### 7.4.10 Field conditions
 
@@ -571,8 +606,8 @@ Requirements:
   unrecognized operator name is a different mistake than a recognized
   operator given the wrong operand type — so it MUST NOT require the
   console diagnostic, though an implementation MAY still choose to log one
-  (as a nicety, not a requirement) to help authors catch typos like
-  `$eqq`. See EC-13.
+  (as a nicety, not a requirement) to make a typo like `$eqq` easier to
+  notice. See EC-13.
 - When `$op` *is* listed in `meta.customOperators` (so `Policy.from(...)`
   already validated that every rule using it references a cataloged
   name — §2), but no checker was ever registered for it at runtime and
@@ -593,8 +628,8 @@ field names, or a mix of both:
 { $ne: null, status: "open" }   # subject is not null, AND subject.status == "open"
 ```
 
-An operator key (`$eq`, `$gt`, `$or`, ...) does not "consume" the whole
-object and MUST NOT cause sibling keys to be ignored.
+An operator key (`$eq`, `$gt`, `$or`, ...) MUST NOT "consume" the whole
+object or cause sibling keys to be ignored.
 
 Any key that starts with `$` MUST be treated as an operator (built-in or
 custom, §7.4.1–§7.4.12) — never as a field name, regardless of whether
@@ -614,24 +649,29 @@ cases that cut across the whole document rather than one operator.
 
 `rules: []` (or an absent `rules` key, depending on how strict the
 consuming implementation chooses to be per §2) means nothing is ever
-allowed; `can` is `false` for every action/subject.
+allowed; `can` MUST be `false` for every action/subject.
 
 ### EC-2 — No rule matches at all
 
-Default deny — falls out of §6's algorithm naturally.
+The result MUST be `false` (default deny).
 
 ### EC-3 — Blanket rules, and being overridden
 
-A rule with no fourth tuple element (`allow` or `deny`) blocks/opens every
+A rule with no fourth tuple element (`condition`) blocks/opens every
 instance of that action/subject combination — *as long as no rule declared
 after it also matches*. Under last-rule-wins (§6), a blanket rule is not
 immune to being reopened or reclosed by a later, more specific rule for
 the same action/subject; if that's not the intent, the blanket rule MUST
-be declared last among the rules it's meant to override. Implementations
-MAY print a warning or error to the console when a blanket rule is
-declared *before* other rules that could match the same action/subject —
-since those later rules would make the blanket rule's effect on those
-cases unreachable, which is very likely unintentional.
+be declared last among the rules it's meant to override.
+
+Implementations MAY print a warning to the console for either of two
+suspicious rule-ordering patterns: a blanket **allow** rule declared
+*before* other rules that could match the same action/subject (worth a
+second look — later, narrower rules need to be trusted to fully cover
+whatever shouldn't be allowed), or a blanket **deny** rule declared
+*after* a run of other rules for the same action/subject (a common
+mistake: a bunch of rules were defined, then silently made entirely
+unreachable by a later blanket deny).
 
 ### EC-4 — Overlapping allow and deny, both conditional
 
@@ -646,11 +686,11 @@ rule to simply have a matching condition somewhere earlier in the list.
 Under last-rule-wins (§6), listing two rules that could both match the
 same action, subject, and instance is not harmless — whichever of them is
 declared *later* in `rules` is the one that decides the outcome, full
-stop, even if an earlier rule looks more specific. Authors MUST place
-general rules first and any rule meant to override them strictly later in
-the array; reordering two overlapping rules can silently flip `can`'s
-answer. Implementation documentation SHOULD encourage this "general rules
-first, specific rules later" convention explicitly.
+stop, even if an earlier rule looks more specific. General rules MUST be
+placed first, with any rule meant to override them declared strictly
+later in the array; reordering two overlapping rules can silently flip
+`can`'s answer. Implementation documentation SHOULD encourage this
+"general rules first, specific rules later" convention explicitly.
 
 ### EC-6 — Wildcards
 
@@ -661,28 +701,38 @@ that declares no `meta` at all. `[allow, _ANY_, Article]` matches every
 action on `Article`; `[allow, Delete, _ANY_]` matches `Delete` on every
 subject name. Wildcards are resolved purely by string comparison against
 the policy's effective `anyAction`/`anySubject` — they are not regex or
-glob patterns.
+glob patterns. Either MAY be explicitly disabled by setting `meta.anyAction`/
+`meta.anySubject` to `null` (§2, §4, §5); in a policy that disables one,
+no string carries wildcard meaning for that position, including `"_ANY_"`
+itself, and it becomes a legal, ordinary literal name — see EC-14.
 
-A wildcard rule MUST NOT carry a condition (§6, property 5) —
-`[allow, _ANY_, Article, { owner_id: 1 }]` is invalid. `Policy.from(...)`
-MUST throw a `PolicyLoadException` for such a definition, and a
-`PolicyBuilder`'s `allow()`/`deny()` (or equivalent) MUST throw an
-argument-error exception immediately when called with a wildcard action
-or subject together with a non-empty condition. Conditions in KeyCard
-evaluate against the *target subject's* data (§7), not against claims
-about the caller — an "admins can do anything" rule is not expressible by
-attaching a role check to a wildcard rule; model it as a per-action rule
-with a condition instead (see the worked example at the end of this
-document), or select an entirely different `PolicyDefinition` at the
-application layer based on the caller's claims.
+A rule wildcarded on **both** sides MUST NOT carry a condition (§6,
+property 5) — `[allow, _ANY_, _ANY_, { owner_id: 1 }]` is invalid.
+`Policy.from(...)` MUST throw a `PolicyLoadException` for such a
+definition, and a `PolicyBuilder`'s `allow()`/`deny()` (or equivalent)
+MUST throw an argument-error exception immediately when called this way.
+A rule wildcarded on only *one* side MAY carry a condition:
+`[allow, _ANY_, Article, { owner_id: 1 }]` (wildcard action, concrete
+subject) is unrestricted; `[allow, Delete, _ANY_, { owner_id: 1 }]`
+(concrete action, wildcard subject) is valid but SHOULD NOT be used,
+since the condition may then be evaluated against many differently-shaped
+subjects and silently fail to match some of them via §7.3's missing-field
+handling rather than erroring — a type-safety hazard, not a correctness
+one. Conditions in KeyCard evaluate against the *target subject's* data
+(§7), not against claims about the caller — an "admins can do anything"
+rule still isn't expressible as a doubly-wildcarded rule with a role
+condition attached; model it as a per-action rule with a condition
+instead (see the worked example at the end of this document), or select
+an entirely different `PolicyDefinition` at the application layer based
+on the caller's claims.
 
 ### EC-7 — Checking a bare type with a conditional rule
 
 `can("Update", "Article")` (no instance data) against a rule
-`[allow, Update, Article, { owner_id: 1 }]` is `false` (assuming no later
-rule also matches) — the condition can't be satisfied without instance
-data to inspect, and that counts as "does not match," not as an error or
-an automatic pass.
+`[allow, Update, Article, { owner_id: 1 }]` is `false` (assuming no other
+rule matches) — the condition can't be satisfied without instance data to
+inspect, and that counts as "does not match," not as an error or an
+automatic pass.
 
 ### EC-8 — Unregistered action or subject names, and catalog enforcement
 
@@ -700,11 +750,10 @@ catalog entry no rule uses is never an error (§2).
 
 When `can`/`cannot`/`require` is passed a `SubjectDef` type token rather
 than a `SubjectRef`, the "subject value" used for condition evaluation is
-implementation-defined (see `KNOWN_ISSUES.md` for what each implementation
-currently does) but MUST NOT expose fields that make ordinary domain
-conditions (`owner_id`, `status`, etc.) accidentally match. A condition
-that inspects real domain fields is expected to evaluate to `false` in the
-absence of real instance data, the same as EC-7.
+implementation-defined but MUST NOT expose fields that make ordinary
+domain conditions (`owner_id`, `status`, etc.) accidentally match. A
+condition that inspects real domain fields is expected to evaluate to
+`false` in the absence of real instance data, the same as EC-7.
 
 ### EC-10 — Malformed rule tuple
 
@@ -715,19 +764,20 @@ deferred to evaluation time.
 
 ### EC-11 — `version` incompatibility
 
-A document declaring a `version` whose MAJOR the implementation doesn't
-support, or whose MINOR is higher than what the implementation
-understands (within a supported MAJOR), MUST cause `Policy.from(...)` to
-throw a `PolicyVersionException` at construction time (§3). PATCH MUST
-never affect this decision.
+A document declaring a `version` whose `MAJOR` the implementation doesn't
+support, or whose `MINOR` is higher than what the implementation
+understands (within a supported `MAJOR`), MUST cause `Policy.from(...)` to
+throw a `PolicyVersionException` at construction time (§3). `PATCH` MUST
+NOT affect this decision.
 
 ### EC-12 — Case sensitivity
 
 Action and subject-name matching (including against the effective
-`anyAction`/`anySubject` wildcards) is exact and case-sensitive: `"read"`
-does not match a rule written for `"Read"`, and if the effective
-`anyAction` is `"_ANY_"`, the string `"_any_"` is not the wildcard. Field
-names inside conditions are likewise matched exactly as written.
+`anyAction`/`anySubject` wildcards) is exact and case-sensitive: the
+string `"read"` MUST NOT match a rule written for `"Read"`, and if the
+effective `anyAction` is `"_ANY_"`, the string `"_any_"` MUST NOT be
+treated as the wildcard. Field names inside conditions are likewise
+matched exactly as written.
 
 ### EC-13 — Unregistered or undeclared custom condition operators
 
@@ -749,11 +799,14 @@ string is currently the effective `anyAction` MUST NOT also be used as an
 ordinary, literal action name (and likewise for `anySubject`/subjects). A
 *different* policy that overrides `meta.anyAction` to a different string
 reserves that different string instead, with no conflict, because
-reservation is scoped to the declaring policy. `anyAction` and
-`anySubject` are independent of each other (one governs the `Action`
-position, the other the `Subject` position) and MAY even share the same
-literal string with no conflict, since actions and subjects are never
-compared against each other.
+reservation is scoped to the declaring policy. A policy that explicitly
+sets `meta.anyAction`/`meta.anySubject` to `null` (§2) reserves nothing at
+all for that position — every string, including `"_ANY_"`, is then a
+legal, ordinary literal name there. `anyAction` and `anySubject` are
+independent of each other (one governs the `Action` position, the other
+the `Subject` position) and MAY even share the same literal string with
+no conflict, since actions and subjects are never compared against each
+other.
 
 ### EC-15 — A cataloged custom operator is never registered
 
@@ -790,7 +843,7 @@ description: "Users can only modify their own articles"
 
 meta:
   actions: [Read, Create, Update, Delete]
-  subjects: [Article]
+  subjects: [Article, _ANY_]
   customOperators: [$hasRole]
 
 rules:
@@ -804,9 +857,9 @@ rules:
 
 The first rule uses this policy's default wildcard-subject token, `_ANY_`
 (§5, EC-6) — no `meta.anySubject` override is declared, so `_ANY_` is
-what `matchesSubject` checks for; wildcard rules like this one MUST be
-unconditional, and this one is. `meta.actions`/`meta.subjects` don't list
-`_ANY_` — it's allowed to be excluded (§2).
+what `matchesSubject` checks for; a rule wildcarded on only one side (here,
+the subject) MAY carry a condition, but this one doesn't need to, so it's
+unconditional.
 
 The last rule is declared last on purpose: because it's an `allow` and its
 condition (`$hasRole: admin`) can still be satisfied for an archived
@@ -819,6 +872,6 @@ registered a checker for at `Policy` construction time (e.g. one that
 checks `subject.roles.includes("admin")`); per EC-15, if the application
 forgot to register it, evaluating this rule logs a diagnostic rather than
 silently letting every admin-only check fail closed with no clue why.
-Note this rule is an ordinary `Delete`/`Article` rule with a condition —
-not a wildcard rule — so it isn't subject to EC-6's no-condition
-restriction.
+Note this rule is wildcarded on *neither* side (it names both a concrete
+action, `Delete`, and a concrete subject, `Article`), so it isn't subject
+to EC-6's both-sides-wildcarded restriction regardless.
