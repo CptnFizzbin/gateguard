@@ -1,7 +1,7 @@
 import type { Subject } from "./Subject";
 
 /**
- * Infers the `readonly Subject[]` shape expected by `PolicyBuilder`/`Policy`
+ * Infers the union of `Subject` types expected by `PolicyBuilder`/`Policy`
  * from a subjects map, so callers don't have to spell out
  * `typeof Subjects[keyof typeof Subjects]` by hand.
  *
@@ -13,4 +13,4 @@ import type { Subject } from "./Subject";
  * type AppSubjects = InferSubjects<typeof Subjects>;
  * new PolicyBuilder<AppActions, AppSubjects>()
  */
-export type InferSubjects<T extends Record<string, Subject>> = readonly T[keyof T][];
+export type InferSubjects<T extends Record<string, Subject>> = T[keyof T];

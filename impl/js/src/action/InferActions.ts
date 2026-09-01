@@ -1,7 +1,7 @@
 import type { Action } from "./Action";
 
 /**
- * Infers the `readonly Action[]` shape expected by `PolicyBuilder`/`Policy`
+ * Infers the union of `Action` types expected by `PolicyBuilder`/`Policy`
  * from an actions map, so callers don't have to spell out
  * `typeof Actions[keyof typeof Actions]` by hand.
  *
@@ -14,4 +14,4 @@ import type { Action } from "./Action";
  * type AppActions = InferActions<typeof Actions>;
  * new PolicyBuilder<AppActions, AppSubjects>()
  */
-export type InferActions<T extends Record<string, Action>> = readonly T[keyof T][];
+export type InferActions<T extends Record<string, Action>> = T[keyof T];

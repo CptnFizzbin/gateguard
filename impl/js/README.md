@@ -33,7 +33,7 @@ const Subjects = {
   Article: createSubject<{ id: number; owner_id: number; status: string }>("Article"),
 } as const;
 
-// InferActions/InferSubjects derive the readonly array types PolicyBuilder
+// InferActions/InferSubjects derive the union types PolicyBuilder
 // and Policy expect, so you don't have to spell out
 // `typeof Actions[keyof typeof Actions]` by hand.
 type AppActions = InferActions<typeof Actions>;
@@ -98,7 +98,7 @@ Create a typed action.
 Create a typed subject definition.
 
 ### InferActions<T> / InferSubjects<T>
-Derive the `readonly Action[]` / `readonly Subject[]` types that `PolicyBuilder`
+Derive the `Action` / `Subject` union types that `PolicyBuilder`
 and `Policy` expect from an actions or subjects map, e.g.
 `InferActions<typeof Actions>`, so callers don't have to write
 `typeof Actions[keyof typeof Actions]` by hand.
