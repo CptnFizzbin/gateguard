@@ -1,0 +1,39 @@
+name: Node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "impl/node/**"
+      - "test/fixtures/**"
+      - ".github/workflows/node.yml"
+  pull_request:
+    paths:
+      - "impl/node/**"
+      - "test/fixtures/**"
+      - ".github/workflows/node.yml"
+
+defaults:
+  run:
+    working-directory: impl/node
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # package-lock.json is intentionally gitignored for this package, so
+      # install rather than `npm ci`.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test -- run

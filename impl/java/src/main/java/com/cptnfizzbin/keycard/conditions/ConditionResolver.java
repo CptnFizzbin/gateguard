@@ -73,6 +73,8 @@ public final class ConditionResolver {
                     if (subject instanceof Map) {
                         Object subjectValue = ((Map<?, ?>) subject).get(key);
                         if (!evaluate(subjectValue, value)) return false;
+                    } else if (subject == null) {
+                        return false;
                     } else {
                         try {
                             java.lang.reflect.Field field = subject.getClass().getDeclaredField(key);

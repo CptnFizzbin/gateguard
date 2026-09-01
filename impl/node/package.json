@@ -22,12 +22,10 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "@vitest/ui": "^1.0.0",
+    "@vitest/ui": "^4.1.11",
     "eslint": "^8.50.0",
     "typescript": "^5.2.0",
-    "vitest": "^4.1.11"
-  },
-  "dependencies": {
+    "vitest": "^4.1.11",
     "yaml": "^2.9.0"
   }
 }

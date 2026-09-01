@@ -17,6 +17,8 @@ export interface PolicyDefinition<
   TSubjects extends readonly Subject[] = readonly Subject[]
 > {
   version: number;
+  name?: string;
+  description?: string;
   rules: {
     allow: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>;
     deny: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>;
