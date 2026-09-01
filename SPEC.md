@@ -46,13 +46,18 @@ example:
 
 ```yaml
 version: 1 # KeyCard policy spec version
+actions: [Create, Update, Delete, anyAction]
+subjects: [Article, anySubject]
 rules:
-  allow:
-    - [Create, Article] # Allow to create any article
-    - [Update, Article, { owner_id: 1 }] # Allowed to update articles they own
-  deny:
-    - [Delete, Article, { status: { $not: "archived" } }] # Not allowed to delete archived articles
+  - [allow, Create, Article] # Allow to create any article
+  - [allow, Update, Article, { owner_id: 1 }] # Allowed to update articles they own
+  - [deny, Delete, Article, { status: { $not: "archived" } }] # Not allowed to delete archived articles
 ```
+
+`rules` is a single, order-significant list: the *last* rule that matches
+an action/subject/condition wins (CASL.js-style), not "any deny beats any
+allow." See [`docs/spec/v1.md`](docs/spec/v1.md) §6 for the exact
+algorithm, and §4/§5 for the `anyAction`/`anySubject` wildcards.
 
 Condition
 ---------
