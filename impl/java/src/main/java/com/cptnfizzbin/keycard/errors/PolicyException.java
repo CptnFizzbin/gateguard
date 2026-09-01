@@ -1,11 +1,7 @@
 package com.cptnfizzbin.keycard.errors;
 
-public class PolicyException extends RuntimeException {
-    public PolicyException(String message) {
-        super(message);
-    }
+import lombok.experimental.StandardException;
 
-    public PolicyException(String message, Throwable cause) {
-        super(message, cause);
-    }
+@StandardException
+public class PolicyException extends RuntimeException {
 }
