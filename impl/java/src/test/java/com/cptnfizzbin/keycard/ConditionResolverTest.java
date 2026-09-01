@@ -1,5 +1,7 @@
 package com.cptnfizzbin.keycard;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.junit.Test;
 
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
@@ -13,20 +15,12 @@ import static org.junit.Assert.*;
 public class ConditionResolverTest {
     private final ConditionResolver resolver = new ConditionResolver();
 
+    @Getter
+    @AllArgsConstructor
     static class Article {
-        public final int id;
-        public final int ownerId;
-        public final String status;
-
-        public Article(int id, int ownerId, String status) {
-            this.id = id;
-            this.ownerId = ownerId;
-            this.status = status;
-        }
-
-        public int getId() { return id; }
-        public int getOwnerId() { return ownerId; }
-        public String getStatus() { return status; }
+        private final int id;
+        private final int ownerId;
+        private final String status;
     }
 
     @Test

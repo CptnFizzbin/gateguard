@@ -1,5 +1,7 @@
 package com.cptnfizzbin.keycard;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.junit.Test;
 
 import com.cptnfizzbin.keycard.policy.Policy;
@@ -16,23 +18,13 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 public class ConditionsHelperTest {
+    @Getter
+    @AllArgsConstructor
     static class Article {
-        public final int id;
-        public final int ownerId;
-        public final String status;
-        public final int viewCount;
-
-        public Article(int id, int ownerId, String status, int viewCount) {
-            this.id = id;
-            this.ownerId = ownerId;
-            this.status = status;
-            this.viewCount = viewCount;
-        }
-
-        public int getId() { return id; }
-        public int getOwnerId() { return ownerId; }
-        public String getStatus() { return status; }
-        public int getViewCount() { return viewCount; }
+        private final int id;
+        private final int ownerId;
+        private final String status;
+        private final int viewCount;
     }
 
     @Test
