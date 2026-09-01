@@ -9,6 +9,7 @@ import com.cptnfizzbin.keycard.errors.PolicyException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 public final class Policy {
     private final PolicyDefinition definition;
@@ -62,24 +63,20 @@ public final class Policy {
     }
 
     public <T> boolean can(Action<?> action, SubjectDef<T> subject) {
-        return checkPermission(action, subject.getName(), null, false)
-            && !checkPermission(action, subject.getName(), null, true);
+        return checkPermission(action, subject.getName(), null);
     }
 
     public <T> boolean can(Action<?> action, SubjectRef<T> subject) {
-        return checkPermission(action, subject.getName(), subject.getValue(), false)
-            && !checkPermission(action, subject.getName(), subject.getValue(), true);
+        return checkPermission(action, subject.getName(), subject.getValue());
     }
 
     public boolean can(String action, String subject) {
-        return checkPermissionString(action, subject, null, false)
-            && !checkPermissionString(action, subject, null, true);
+        return checkPermissionString(action, subject, null);
     }
 
     public boolean can(String action, Object subject) {
         String subjectName = getSubjectNameFromObject(subject);
-        return checkPermissionString(action, subjectName, subject, false)
-            && !checkPermissionString(action, subjectName, subject, true);
+        return checkPermissionString(action, subjectName, subject);
     }
 
     public <T> boolean cannot(Action<?> action, SubjectDef<T> subject) {
@@ -110,24 +107,27 @@ public final class Policy {
         return new Policy(new PolicyDefinition(definition.getVersion(), combined, denyRules));
     }
 
-    private boolean checkPermission(Action<?> action, String subjectName, Object subjectValue, boolean inverted) {
-        List<PolicyDefinition.Rule> rules = inverted ? definition.getDenyRules() : definition.getAllowRules();
-        
-        for (PolicyDefinition.Rule rule : rules) {
-            if (matchesAction(action, rule) && matchesSubject(subjectName, rule)) {
-                if (rule.getConditions() == null || resolver.evaluate(subjectValue, rule.getConditions())) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    /** True iff a rule allows this action/subject, and no rule denies it. */
+    private boolean checkPermission(Action<?> action, String subjectName, Object subjectValue) {
+        Predicate<PolicyDefinition.Rule> actionMatches = rule -> matchesAction(action, rule);
+        return matchesAnyRule(definition.getAllowRules(), actionMatches, subjectName, subjectValue)
+            && !matchesAnyRule(definition.getDenyRules(), actionMatches, subjectName, subjectValue);
     }
 
-    private boolean checkPermissionString(String actionName, String subjectName, Object subjectValue, boolean inverted) {
-        List<PolicyDefinition.Rule> rules = inverted ? definition.getDenyRules() : definition.getAllowRules();
-        
+    private boolean checkPermissionString(String actionName, String subjectName, Object subjectValue) {
+        Predicate<PolicyDefinition.Rule> actionMatches = rule -> matchesActionString(actionName, rule);
+        return matchesAnyRule(definition.getAllowRules(), actionMatches, subjectName, subjectValue)
+            && !matchesAnyRule(definition.getDenyRules(), actionMatches, subjectName, subjectValue);
+    }
+
+    private boolean matchesAnyRule(
+        List<PolicyDefinition.Rule> rules,
+        Predicate<PolicyDefinition.Rule> actionMatches,
+        String subjectName,
+        Object subjectValue
+    ) {
         for (PolicyDefinition.Rule rule : rules) {
-            if (matchesActionString(actionName, rule) && matchesSubject(subjectName, rule)) {
+            if (actionMatches.test(rule) && matchesSubject(subjectName, rule)) {
                 if (rule.getConditions() == null || resolver.evaluate(subjectValue, rule.getConditions())) {
                     return true;
                 }

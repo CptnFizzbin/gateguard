@@ -55,11 +55,7 @@ export class Policy<
   }
 
   can(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {
-    if (!this.checkPermission(action, subject, false)) {
-      return false;
-    }
-    // A matching deny rule overrides a matching allow rule.
-    return !this.checkPermission(action, subject, true);
+    return this.checkPermission(action, subject);
   }
 
   cannot(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {
@@ -85,13 +81,23 @@ export class Policy<
     return new Policy(merged, this.resolver["customCheckers"]);
   }
 
+  /** True iff a rule allows this action/subject, and no rule denies it. */
   private checkPermission(
     action: TActions[number],
-    subject: TSubjects[number] | SubjectDef | SubjectRef | string,
-    inverted: boolean
+    subject: TSubjects[number] | SubjectDef | SubjectRef | string
+  ): boolean {
+    return (
+      this.matchesAnyRule(this.definition.rules.allow, action, subject) &&
+      !this.matchesAnyRule(this.definition.rules.deny, action, subject)
+    );
+  }
+
+  private matchesAnyRule(
+    rules: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>,
+    action: TActions[number],
+    subject: TSubjects[number] | SubjectDef | SubjectRef | string
   ): boolean {
     const subjectName = this.getSubjectName(subject);
-    const rules = inverted ? this.definition.rules.deny : this.definition.rules.allow;
 
     for (const [ruleAction, ruleSubject, ruleCondition] of rules) {
       if (this.matchesAction(action, ruleAction) && this.matchesSubject(subjectName, ruleSubject)) {
