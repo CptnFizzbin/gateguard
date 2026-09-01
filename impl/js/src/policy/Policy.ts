@@ -5,8 +5,8 @@ import { PolicyError } from "../errors";
 import type { PolicyDefinition } from "../policy/PolicyDefinition";
 
 export class Policy<
-  TActions extends readonly Action[] = readonly Action[],
-  TSubjects extends readonly Subject[] = readonly Subject[]
+  TActions extends Action = Action,
+  TSubjects extends Subject = Subject
 > {
   private definition: PolicyDefinition<TActions, TSubjects>;
   private resolver: ConditionResolver;
@@ -26,16 +26,16 @@ export class Policy<
    * PolicyDefinition object and hands it to KeyCard.
    */
   static from<
-    TActions extends readonly Action[] = readonly Action[],
-    TSubjects extends readonly Subject[] = readonly Subject[]
+    TActions extends Action = Action,
+    TSubjects extends Subject = Subject
   >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
     return new Policy(definition, customConditions);
   }
 
   /** Alias of `from`. */
   static fromDto<
-    TActions extends readonly Action[] = readonly Action[],
-    TSubjects extends readonly Subject[] = readonly Subject[]
+    TActions extends Action = Action,
+    TSubjects extends Subject = Subject
   >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
     return Policy.from(definition, customConditions);
   }
@@ -54,15 +54,15 @@ export class Policy<
     return this.toDefinition();
   }
 
-  can(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {
+  can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
     return this.checkPermission(action, subject);
   }
 
-  cannot(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): boolean {
+  cannot(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
     return !this.can(action, subject);
   }
 
-  require(action: TActions[number], subject: TSubjects[number] | SubjectDef | SubjectRef | string): void {
+  require(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): void {
     if (!this.can(action, subject)) {
       throw new PolicyError(
         `Access denied: cannot ${action} on ${typeof subject === "string" ? subject : JSON.stringify(subject)}`
@@ -83,8 +83,8 @@ export class Policy<
 
   /** True iff a rule allows this action/subject, and no rule denies it. */
   private checkPermission(
-    action: TActions[number],
-    subject: TSubjects[number] | SubjectDef | SubjectRef | string
+    action: TActions,
+    subject: TSubjects | SubjectDef | SubjectRef | string
   ): boolean {
     return (
       this.matchesAnyRule(this.definition.rules.allow, action, subject) &&
@@ -93,9 +93,9 @@ export class Policy<
   }
 
   private matchesAnyRule(
-    rules: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>,
-    action: TActions[number],
-    subject: TSubjects[number] | SubjectDef | SubjectRef | string
+    rules: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]>,
+    action: TActions,
+    subject: TSubjects | SubjectDef | SubjectRef | string
   ): boolean {
     const subjectName = this.getSubjectName(subject);
 
@@ -110,14 +110,14 @@ export class Policy<
     return false;
   }
 
-  private getSubjectName(subject: TSubjects[number] | SubjectDef | SubjectRef | string): string {
+  private getSubjectName(subject: TSubjects | SubjectDef | SubjectRef | string): string {
     if (typeof subject === "string") {
       return subject;
     }
     return subject.__name;
   }
 
-  private getSubjectValue(subject: TSubjects[number] | SubjectDef | SubjectRef | string): any {
+  private getSubjectValue(subject: TSubjects | SubjectDef | SubjectRef | string): any {
     if (typeof subject === "string") {
       return subject;
     }
@@ -127,13 +127,13 @@ export class Policy<
     return subject;
   }
 
-  private matchesAction(action: TActions[number], ruleAction: TActions[number] | string): boolean {
+  private matchesAction(action: TActions, ruleAction: TActions | string): boolean {
     return action === ruleAction || ruleAction === "*";
   }
 
   private matchesSubject(
     subjectName: string,
-    ruleSubject: TSubjects[number] | SubjectDef | string
+    ruleSubject: TSubjects | SubjectDef | string
   ): boolean {
     if (typeof ruleSubject === "string") {
       return subjectName === ruleSubject || ruleSubject === "*";

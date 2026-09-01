@@ -3,24 +3,24 @@ import { Subject, SubjectDef } from "../subject";
 import { Condition } from "../conditions";
 
 export interface Rule<
-  TActions extends readonly Action[] = readonly Action[],
-  TSubjects extends readonly Subject[] = readonly Subject[]
+  TActions extends Action = Action,
+  TSubjects extends Subject = Subject
 > {
-  action: TActions[number] | string;
-  subject: TSubjects[number] | SubjectDef | string;
+  action: TActions | string;
+  subject: TSubjects | SubjectDef | string;
   conditions?: Condition;
   inverted: boolean;
 }
 
 export interface PolicyDefinition<
-  TActions extends readonly Action[] = readonly Action[],
-  TSubjects extends readonly Subject[] = readonly Subject[]
+  TActions extends Action = Action,
+  TSubjects extends Subject = Subject
 > {
   version: number;
   name?: string;
   description?: string;
   rules: {
-    allow: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>;
-    deny: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]>;
+    allow: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]>;
+    deny: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]>;
   };
 }

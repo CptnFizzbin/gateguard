@@ -1,9 +1,9 @@
 // Actions
-export type { Action } from "./action";
+export type { Action, InferActions } from "./action";
 export { createAction } from "./action";
 
 // Subjects
-export type { Subject, SubjectDef, SubjectRef } from "./subject";
+export type { Subject, SubjectDef, SubjectRef, InferSubjects } from "./subject";
 export { createSubject } from "./subject";
 
 // Conditions

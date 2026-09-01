@@ -4,14 +4,14 @@ import { Condition } from "../conditions";
 import type { Rule, PolicyDefinition } from "../policy/PolicyDefinition";
 
 export class PolicyBuilder<
-  TActions extends readonly Action[] = readonly Action[],
-  TSubjects extends readonly Subject[] = readonly Subject[]
+  TActions extends Action = Action,
+  TSubjects extends Subject = Subject
 > {
   private rules: Rule<TActions, TSubjects>[] = [];
 
-  allow<T extends TActions[number]>(
+  allow<T extends TActions>(
     action: T,
-    subject: TSubjects[number] | SubjectDef | string,
+    subject: TSubjects | SubjectDef | string,
     conditions?: Condition
   ): this {
     this.rules.push({
@@ -23,9 +23,9 @@ export class PolicyBuilder<
     return this;
   }
 
-  deny<T extends TActions[number]>(
+  deny<T extends TActions>(
     action: T,
-    subject: TSubjects[number] | SubjectDef | string,
+    subject: TSubjects | SubjectDef | string,
     conditions?: Condition
   ): this {
     this.rules.push({
@@ -42,11 +42,11 @@ export class PolicyBuilder<
   }
 
   buildDef(): PolicyDefinition<TActions, TSubjects> {
-    const allow: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]> = [];
-    const deny: Array<[TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?]> = [];
+    const allow: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]> = [];
+    const deny: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]> = [];
 
     for (const rule of this.rules) {
-      const tuple: [TActions[number] | string, TSubjects[number] | SubjectDef | string, Condition?] = rule.conditions
+      const tuple: [TActions | string, TSubjects | SubjectDef | string, Condition?] = rule.conditions
         ? [rule.action, rule.subject, rule.conditions]
         : [rule.action, rule.subject];
 
