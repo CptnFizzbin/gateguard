@@ -1,6 +1,6 @@
 # KeyCard Policy Specification — v1.0.0
 
-Status: Normative for `version` `1.x.x` policy documents (§3).
+Status: Normative for `version` `1.x.x` policy documents (§2).
 
 This document is the authoritative definition of the `PolicyDefinition`
 format and its evaluation semantics for the v1 line. `SPEC.md` at the repository
@@ -87,7 +87,7 @@ at runtime.
 ## 3. Document structure
 
 ```yaml
-version: "1.0.0"                    # required, SemVer string — see §3
+version: "1.0.0"                    # required, SemVer string — see §2
 name: string                        # optional, informational only
 description: string                 # optional, informational only
 
@@ -190,7 +190,7 @@ An action is a string naming what the caller wants to do (`Read`, `Create`,
 
 Action matching is an exact, **case-sensitive** string comparison between the
 action passed to `can`/`cannot`/`require` and a rule's action. `meta.anyAction`
-(§2) names the one string that, when it appears in a rule's
+(§3) names the one string that, when it appears in a rule's
 `Action` position, is a wildcard matching every action. It defaults to
 `"_ANY_"` when `meta`/`meta.anyAction` is absent — every policy has a working
 action wildcard, whether or not it says anything about it in `meta`.
@@ -204,7 +204,7 @@ defaulted) **MUST NOT** be used as an ordinary action name within that policy �
 a rule meaning the literal action equal to that value is indistinguishable from
 the wildcard.
 
-There is no closed enum of valid actions required by this spec beyond what §2
+There is no closed enum of valid actions required by this spec beyond what §3
 already requires when a catalog is declared: a policy **SHOULD** declare its
 full set via the optional `meta.actions` catalog, and **MUST** do so if it wants
 unlisted actions rejected at construction time (see EC-8).
@@ -225,7 +225,7 @@ Three shapes may be passed to `can`/`cannot`/`require` as the subject:
   These **MUST** be treated as Conditional Rules
 
 Subject-name matching is exact and **case-sensitive**, mirroring action
-matching. `meta.anySubject` (§2) names the one string that, when it appears in a
+matching. `meta.anySubject` (§3) names the one string that, when it appears in a
 rule's `Subject` position, is a wildcard matching every subject name — symmetric
 with `meta.anyAction` (§4) in every respect, including the
 `"_ANY_"` default, the `null`-to-disable option, and the reservation of whatever
@@ -309,7 +309,7 @@ The requirements that **MUST** hold for any v1-conformant implementation are:
    relative to the others that could match the same action/subject is
    meaningful: moving a rule later in `rules` can change `can`'s answer for
    cases it overlaps with. An implementation, a builder, and a parser all
-   **MUST** preserve declaration order end to end — see §2.
+   **MUST** preserve declaration order end to end — see §3.
 4. **Wildcard matching is policy-scoped.** `matchesAction`/`matchesSubject`
    consult *this policy's own* effective `anyAction`/`anySubject` (§4, §5) —
    there is no wildcard token independent of what a given policy declares or
@@ -635,7 +635,7 @@ mechanism the implementation exposes.
   nicety, not a requirement) to make a typo like `$eqq` easier to notice. See
   EC-13.
 - When `$op` *is* listed in `meta.customOperators` (so `Policy.from(...)`
-  already validated that every rule using it references a cataloged name — §2),
+  already validated that every rule using it references a cataloged name — §3),
   but no checker was ever registered for it at runtime and some rule reaches it
   during evaluation: this **MUST** produce the §7.1 console diagnostic, distinct
   from the general case above — a declared-but-unfulfilled operator is a
@@ -672,7 +672,7 @@ across the whole document rather than one operator.
 ### EC-1 — Empty/absent rule list
 
 `rules: []` (or an absent `rules` key, depending on how strict the consuming
-implementation chooses to be per §2) means nothing is ever allowed; `can` MUST
+implementation chooses to be per §3) means nothing is ever allowed; `can` MUST
 be `false` for every action/subject.
 
 ### EC-2 — No rule matches at all
@@ -725,7 +725,7 @@ matching every action on every subject name, even in a policy that declares no
 resolved purely by string comparison against the policy's effective `anyAction`/
 `anySubject` — they are not regex or glob patterns. Either **MAY** be explicitly
 disabled by setting `meta.anyAction`/
-`meta.anySubject` to `null` (§2, §4, §5); in a policy that disables one, no
+`meta.anySubject` to `null` (§3, §4, §5); in a policy that disables one, no
 string carries wildcard meaning for that position, including `"_ANY_"`
 itself, and it becomes a legal, ordinary literal name — see EC-14.
 
@@ -766,9 +766,9 @@ catalog is declared, one that never appears in any rule simply never matches —
 no error. When a catalog *is* declared, `Policy.from(...)` **MUST** throw a
 `PolicyLoadException` at construction if some rule's action isn't covered by
 `meta.actions` (or is the wildcard), or its subject isn't covered by
-`meta.subjects` (or is the wildcard) — see §2. This validation only runs in the
+`meta.subjects` (or is the wildcard) — see §3. This validation only runs in the
 "rule references an undeclared name" direction; a catalog entry no rule uses is
-never an error (§2).
+never an error (§3).
 
 ### EC-9 — Evaluating conditions against a `SubjectDef` (no wrapped instance)
 
@@ -784,7 +784,7 @@ inspects real domain fields is expected to evaluate to
 A rule tuple missing its effect, action, or subject element, or carrying an
 effect other than `"allow"`/`"deny"`, **MUST** cause `Policy.from(...)` to throw
 a
-`PolicyLoadException` at construction time (§2) — it **MUST NOT** be deferred to
+`PolicyLoadException` at construction time (§3) — it **MUST NOT** be deferred to
 evaluation time.
 
 ### EC-11 — `version` incompatibility
@@ -792,7 +792,7 @@ evaluation time.
 A document declaring a `version` whose `MAJOR` the implementation doesn't
 support, or whose `MINOR` is higher than what the implementation understands
 (within a supported `MAJOR`), **MUST** cause `Policy.from(...)` to throw a
-`PolicyVersionException` at construction time (§3). `PATCH` **MUST NOT** affect
+`PolicyVersionException` at construction time (§2). `PATCH` **MUST NOT** affect
 this decision.
 
 ### EC-12 — Case sensitivity
@@ -810,7 +810,7 @@ nor registered as a custom condition checker on that `Policy`/
 `ConditionResolver` instance evaluates to `false` (§7.4.12) — never a type issue
 on its own, never a no-op `true`. When `meta.customOperators`
 is declared, `Policy.from(...)` **MUST** throw a `PolicyLoadException` at
-construction if some rule uses a `$op` not listed there (§2) — the same
+construction if some rule uses a `$op` not listed there (§3) — the same
 enforcement as EC-8, applied to the custom-operator namespace. A
 `meta.customOperators` entry that no rule uses is never an error.
 
@@ -824,7 +824,7 @@ literal action name (and likewise for `anySubject`/subjects). A *different*
 policy that overrides `meta.anyAction` to a different string reserves that
 different string instead, with no conflict, because reservation is scoped to the
 declaring policy. A policy that explicitly sets `meta.anyAction`/
-`meta.anySubject` to `null` (§2) reserves nothing at all for that position —
+`meta.anySubject` to `null` (§3) reserves nothing at all for that position —
 every string, including `"_ANY_"`, is then a legal, ordinary literal name there.
 `anyAction` and `anySubject` are independent of each other (one governs the
 `Action` position, the other the `Subject` position) and **MAY** even share the
@@ -852,7 +852,7 @@ to resolving overlapping rules. KeyCard departs from CASL in scope (a
 declarative, JSON/YAML-serializable `PolicyDefinition`
 meant to be produced server-side and evaluated in any language, rather than an
 in-process JavaScript ability builder) and in specifics (the condition operator
-set in §7, the `meta` catalogs and wildcard tokens in §2/§4/§5, and the
+set in §7, the `meta` catalogs and wildcard tokens in §3/§4/§5, and the
 validation/exception behavior throughout §2, §3, §6, and §8) — this document
 defines KeyCard's own behavior in full; familiarity with CASL is not assumed
 anywhere above.
