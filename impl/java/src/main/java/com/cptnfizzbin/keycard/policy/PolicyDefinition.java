@@ -1,12 +1,12 @@
 package com.cptnfizzbin.keycard.policy;
 
-import lombok.EqualsAndHashCode;
+import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-@EqualsAndHashCode
+@Data
 public final class PolicyDefinition {
     private final int version;
     private final String name;
@@ -46,7 +46,7 @@ public final class PolicyDefinition {
         return List.copyOf(denyRules);
     }
 
-    @EqualsAndHashCode
+    @Data
     public static final class Rule {
         private final String action;
         private final String subjectName;
