@@ -43,6 +43,16 @@
             <version>2.0</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Annotation processor only - generates code at compile time and
+             never appears in the compiled bytecode, so it's never a
+             runtime dependency of this library or its consumers. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.34</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

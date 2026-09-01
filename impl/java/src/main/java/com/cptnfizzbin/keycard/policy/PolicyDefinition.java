@@ -1,9 +1,12 @@
 package com.cptnfizzbin.keycard.policy;
 
+import lombok.EqualsAndHashCode;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@EqualsAndHashCode
 public final class PolicyDefinition {
     private final int version;
     private final String name;
@@ -43,23 +46,7 @@ public final class PolicyDefinition {
         return List.copyOf(denyRules);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof PolicyDefinition)) return false;
-        PolicyDefinition other = (PolicyDefinition) o;
-        return version == other.version
-            && java.util.Objects.equals(name, other.name)
-            && java.util.Objects.equals(description, other.description)
-            && allowRules.equals(other.allowRules)
-            && denyRules.equals(other.denyRules);
-    }
-
-    @Override
-    public int hashCode() {
-        return java.util.Objects.hash(version, name, description, allowRules, denyRules);
-    }
-
+    @EqualsAndHashCode
     public static final class Rule {
         private final String action;
         private final String subjectName;
@@ -81,21 +68,6 @@ public final class PolicyDefinition {
 
         public Map<String, Object> getConditions() {
             return conditions;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof Rule)) return false;
-            Rule other = (Rule) o;
-            return java.util.Objects.equals(action, other.action)
-                && java.util.Objects.equals(subjectName, other.subjectName)
-                && java.util.Objects.equals(conditions, other.conditions);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(action, subjectName, conditions);
         }
     }
 }
