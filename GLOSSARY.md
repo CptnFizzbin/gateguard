@@ -1,0 +1,21 @@
+# Glossary
+
+Term definitions for KeyCard. See [`SPEC.md`](SPEC.md) for the informal
+overview and [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md) for the normative v1
+specification.
+
+- **Claims** - Object(s) that can be used by a builder to create a Policy
+  Definition
+  - e.g. a JWT, or `{ ownerOf: number[] }`
+- **Action** - a string that indicates that the user would like to do
+  something to a subject
+  - e.g. `Create`, `Read`, `Update`, `Delete`, `MarkDone`, `Archive`, ...
+- **Subject** - the value that the user wants to do something with
+  - e.g. `ToDoItem`, `Project`, ...
+- **PolicyBuilder** - takes in claims, and produces a Policy or
+  PolicyDefinition
+- **Rule** - an allowed or denied tuple of effect, action, subject, and
+  conditions
+- **PolicyDefinition** - (PolicyDef) a text based encoding of what
+  permissions the user is allowed/denied
+- **Policy** - an object that can be used to perform checks against/with

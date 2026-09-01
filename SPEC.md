@@ -5,25 +5,15 @@ KeyCard Spec
 - TypeSafe, Cross-Language
 - Define server-side, resolve client-side
 
-> This is an informal overview. For the normative v1 specification —
-> exact rule-evaluation semantics, the full condition-operator table, and
-> a catalogue of required edge-case behavior — see
-> [`docs/spec/v1.md`](docs/spec/v1.md).
+> This is an informal overview. For term definitions, see
+> [`GLOSSARY.md`](GLOSSARY.md). For the normative v1 specification — exact
+> rule-evaluation semantics, the full condition-operator table, and a
+> catalogue of required edge-case behavior — see
+> [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md). Known gaps between that spec and the
+> current implementations are tracked in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 
-Glossary
---------
-
-- Claims - Object(s) that can be used by a builder to create a Policy Definition
-  - JWT, { ownerOf: number[] }
-- Action - a string that indicates that the user would like to do something to a subject
-  - eg: Create, Read, Update, Delete, MarkDone, Archive, etc...
-- Subject - the value that the user wants to do something with
-  - eg: ToDoItem, Project, etc...
-- PolicyBuilder - takes in claims, and produces a Policy or PolicyDefiniton
-- Rule - an allowed or denied triplet of action, subject, and conditions
-- PolicyDefinition - (PolicyDef) a text based encoding of what permissions the user is allowed/denied
-- Policy - an object that can be used to preform checks against/with
-
+See [`GLOSSARY.md`](GLOSSARY.md) for definitions of Claims, Action,
+Subject, PolicyBuilder, Rule, PolicyDefinition, and Policy.
 
 Builder
 -------
@@ -45,12 +35,10 @@ Policy Definition
 example:
 
 ```yaml
-version: 1 # KeyCard policy spec version
+version: "1.0.0" # KeyCard policy spec version (SemVer)
 meta:
-  anyAction: anyAction
-  anySubject: anySubject
-  actions: [Create, Update, Delete, anyAction]
-  subjects: [Article, anySubject]
+  actions: [Create, Update, Delete]
+  subjects: [Article]
 rules:
   - [allow, Create, Article] # Allow to create any article
   - [allow, Update, Article, { owner_id: 1 }] # Allowed to update articles they own
@@ -58,12 +46,12 @@ rules:
 ```
 
 `rules` is a single, order-significant list: the *last* rule that matches
-an action/subject/condition wins (CASL.js-style), not "any deny beats any
-allow." `anyAction`/`anySubject` aren't fixed reserved words - they're
-just the wildcard token strings this policy happens to declare in `meta`;
-a policy that declares no `meta.anyAction`/`meta.anySubject` has no
-wildcard mechanism at all. See [`docs/spec/v1.md`](docs/spec/v1.md) §6 for
-the exact algorithm, and §2/§4/§5 for `meta` and the wildcards.
+an action/subject/condition wins, not "any deny beats any allow." Every
+policy has a default wildcard token, `_ANY_`, for both actions and
+subjects (e.g. `[allow, _ANY_, _ANY_]` matches anything); a policy MAY
+override either via `meta.anyAction`/`meta.anySubject`. See
+[`SPEC_V1-0-0.md`](SPEC_V1-0-0.md) §6 for the exact algorithm, and
+§2/§4/§5 for `meta` and the wildcards.
 
 Condition
 ---------
@@ -78,13 +66,16 @@ Condition =
   | LteCondition = { $lte: TValue } //=> TSubject <= TValue
   | InCondition = { $in: TValue[] } //=> TValue[].contains(TSubject)
   | HasCondition = { $has: TValue } //=> TSubject[].contains(TValue)
-  | RegexCondition = { $rgx: TValue } //=> TValue.match(TSubject)
+  | SubstrCondition = { $substr: TValue } //=> a small non-regex pattern language matches TSubject
   | OrCondition = { $or: Condition[] } //=> Condition[].any(TSubject)
   | AndCondition = { $and: Condition[] } //=> Condition[].all(TSubject)
   | NotCondition = { $not: Condition } //=> !Condition(TSubject)
-  | FieldCondition = { [key]: Condition } //=> Condition(TSubject[key])
-  // Note: an alternate `{ $field: [key, Condition] }` form was sketched
-  // here but is reserved/unimplemented as of v1 - see docs/spec/v1.md §7.5.
+  | FieldCondition = { [key]: Condition } //=> Condition(TSubject[key]), key MUST NOT start with "$"
+  | ExplicitFieldCondition = { $field: [key, Condition] } //=> Condition(TSubject[key]), required when key starts with "$"
+
+See [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md) §7 for full operator semantics,
+including `$substr`'s pattern language (§7.4.6) and why regex matching
+(`$rgx`) isn't part of v1.
 
 Policy
 ------
@@ -95,4 +86,5 @@ Policy
   - can(TAction, TSubjectName | TSubject) => boolean
   - cannot(TAction, TSubjectName | TSubject) => boolean
   - require(TAction, TSubjectName | TSubject) => void throws PolicyError
-  - append(PolicyDef) => Policy
+
+`append` is not part of v1 — see [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md) §1.
