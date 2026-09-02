@@ -25,13 +25,25 @@ import static org.junit.Assume.assumeTrue;
  * fixture format and the adapter this suite uses to run v1 fixtures
  * against the current, pre-v1 implementation.
  *
- * A suite whose declared `version` isn't covered by
- * {@link ComplianceFixtures#MAX_VERSION_PROPERTY}, when that system
- * property is set, is skipped (not failed) via {@link org.junit.Assume} -
- * see ComplianceFixtures for that filtering knob.
+ * A fixture whose declared `version` isn't covered by
+ * {@link #COMPLIANT_VERSION} - this suite's own baked-in ceiling, per
+ * SPEC_V1-0-0.md §2's compatibility rule - is skipped (not failed) via
+ * {@link org.junit.Assume}; see {@link ComplianceFixtures#isIncluded} for
+ * the mechanics and {@link ComplianceFixtures#MAX_VERSION_PROPERTY} for the
+ * knob that overrides it for a single run.
  */
 @RunWith(Parameterized.class)
 public class V1ConformanceFixtureTest {
+
+    /**
+     * The highest v1 SemVer this suite's adapter (see {@link V1Fixtures})
+     * is written against. Baked into the suite itself - rather than left to
+     * whatever an external default happens to be - so "which version this
+     * runs compliant with" is a property of the code: bump it only once the
+     * adapter has actually been updated to handle whatever a newer MINOR
+     * version's fixtures add, not merely because such fixtures exist.
+     */
+    private static final String COMPLIANT_VERSION = "1.0.0";
 
     @Parameters(name = "{0} > {1} > {2}")
     public static Collection<Object[]> cases() throws IOException {
@@ -61,8 +73,8 @@ public class V1ConformanceFixtureTest {
     @Test
     public void resolvesExpectedResult() {
         assumeTrue(
-            "suite version " + suite.version() + " excluded by -D" + ComplianceFixtures.MAX_VERSION_PROPERTY,
-            ComplianceFixtures.isIncluded(suite.version())
+            "suite version " + suite.version() + " exceeds this suite's compliant version " + COMPLIANT_VERSION,
+            ComplianceFixtures.isIncluded(suite.version(), COMPLIANT_VERSION)
         );
 
         Policy policy = Policy.from(suite.legacyDefinition());

@@ -60,21 +60,28 @@ public class ComplianceFixturesTest {
     }
 
     @Test
-    public void everyFixtureIsIncludedWhenNoCapIsConfigured() {
-        assertTrue(ComplianceFixtures.isIncluded("1.0.0"));
-        assertTrue(ComplianceFixtures.isIncluded("9.9.9"));
+    public void aFixtureAtOrBelowTheBakedInCompliantVersionIsIncluded() {
+        assertTrue(ComplianceFixtures.isIncluded("1.0.0", "1.0.0"));
+        assertTrue(ComplianceFixtures.isIncluded("1.0.0", "1.5.0"));
     }
 
     @Test
-    public void aFixtureWithinTheConfiguredCapIsIncluded() {
+    public void aFixtureAboveTheBakedInCompliantVersionIsExcluded() {
+        assertFalse(ComplianceFixtures.isIncluded("1.5.0", "1.0.0"));
+    }
+
+    @Test
+    public void theSystemPropertyOverridesTheBakedInCompliantVersion() {
         System.setProperty(ComplianceFixtures.MAX_VERSION_PROPERTY, "1.5.0");
-        assertTrue(ComplianceFixtures.isIncluded("1.0.0"));
+        // Would be excluded against a baked-in "1.0.0", but the override widens it.
+        assertTrue(ComplianceFixtures.isIncluded("1.2.0", "1.0.0"));
     }
 
     @Test
-    public void aFixtureBeyondTheConfiguredCapIsExcluded() {
+    public void theSystemPropertyCanNarrowTheBakedInCompliantVersionToo() {
         System.setProperty(ComplianceFixtures.MAX_VERSION_PROPERTY, "1.0.0");
-        assertFalse(ComplianceFixtures.isIncluded("1.5.0"));
+        // Would be included against a baked-in "1.5.0", but the override narrows it.
+        assertFalse(ComplianceFixtures.isIncluded("1.2.0", "1.5.0"));
     }
 
     @Test

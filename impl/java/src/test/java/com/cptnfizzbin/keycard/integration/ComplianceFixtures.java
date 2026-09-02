@@ -102,18 +102,28 @@ final class ComplianceFixtures {
     }
 
     /**
-     * System property used to cap which fixture versions a test run
-     * exercises (e.g. {@code mvn test -Dkeycard.fixtures.maxVersion=1.0.0}) -
-     * useful once fixtures for a newer MINOR version exist and an
-     * implementation that only targets an older one shouldn't be expected
-     * to pass them yet. Unset means "no cap, run every fixture regardless
-     * of the version it declares".
+     * System property that overrides a suite's baked-in
+     * {@code compliantVersion} for one run (e.g.
+     * {@code mvn test -Dkeycard.fixtures.maxVersion=1.0.0}) - useful for
+     * deliberately narrowing or widening the cap without editing code.
+     * Unset (the common case) means "use whatever version the compliance
+     * suite itself bakes in".
      */
     static final String MAX_VERSION_PROPERTY = "keycard.fixtures.maxVersion";
 
-    /** True when a fixture declaring {@code fixtureVersion} should run, given any configured version cap. */
-    static boolean isIncluded(String fixtureVersion) {
-        String max = System.getProperty(MAX_VERSION_PROPERTY);
-        return max == null || isCompatible(fixtureVersion, max);
+    /**
+     * True when a fixture declaring {@code fixtureVersion} should run
+     * against a compliance suite that bakes in {@code compliantVersion} as
+     * the highest version its adapter is written against - see e.g.
+     * {@code V1ConformanceFixtureTest.COMPLIANT_VERSION}. Every compliance
+     * suite bakes in its own version rather than defaulting to "run
+     * everything", so a suite whose adapter hasn't caught up to a newer
+     * MINOR version's fixtures skips them automatically, with no external
+     * configuration required; {@link #MAX_VERSION_PROPERTY} overrides that
+     * baked-in default when set.
+     */
+    static boolean isIncluded(String fixtureVersion, String compliantVersion) {
+        String override = System.getProperty(MAX_VERSION_PROPERTY);
+        return isCompatible(fixtureVersion, override != null ? override : compliantVersion);
     }
 }

@@ -49,19 +49,25 @@ describe("isIncluded", () => {
     delete process.env[MAX_VERSION_ENV_VAR];
   });
 
-  test("every fixture is included when no cap is configured", () => {
-    expect(isIncluded("1.0.0")).toBe(true);
-    expect(isIncluded("9.9.9")).toBe(true);
+  test("a fixture at or below the baked-in compliant version is included", () => {
+    expect(isIncluded("1.0.0", "1.0.0")).toBe(true);
+    expect(isIncluded("1.0.0", "1.5.0")).toBe(true);
   });
 
-  test("a fixture within the configured cap is included", () => {
+  test("a fixture above the baked-in compliant version is excluded", () => {
+    expect(isIncluded("1.5.0", "1.0.0")).toBe(false);
+  });
+
+  test("the env var overrides the baked-in compliant version", () => {
     process.env[MAX_VERSION_ENV_VAR] = "1.5.0";
-    expect(isIncluded("1.0.0")).toBe(true);
+    // Would be excluded against a baked-in "1.0.0", but the override widens it.
+    expect(isIncluded("1.2.0", "1.0.0")).toBe(true);
   });
 
-  test("a fixture beyond the configured cap is excluded", () => {
+  test("the env var can narrow the baked-in compliant version too", () => {
     process.env[MAX_VERSION_ENV_VAR] = "1.0.0";
-    expect(isIncluded("1.5.0")).toBe(false);
+    // Would be included against a baked-in "1.5.0", but the override narrows it.
+    expect(isIncluded("1.2.0", "1.5.0")).toBe(false);
   });
 });
 

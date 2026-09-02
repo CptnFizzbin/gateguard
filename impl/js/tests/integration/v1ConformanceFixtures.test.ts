@@ -29,10 +29,21 @@ import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
  *
  * Discovery, subject-argument construction, and version filtering are
  * shared with every other compliance suite via ./complianceFixtures - see
- * that module for the KEYCARD_FIXTURES_MAX_VERSION knob this suite honors.
+ * that module for the KEYCARD_FIXTURES_MAX_VERSION knob that overrides
+ * COMPLIANT_VERSION below for a single run.
  */
 
 const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/v1");
+
+/**
+ * The highest v1 SemVer this suite's adapter (toLegacyDefinition below) is
+ * written against. Baked into the suite itself - rather than left to
+ * whatever an external default happens to be - so "which version this runs
+ * compliant with" is a property of the code: bump it only once the adapter
+ * has actually been updated to handle whatever a newer MINOR version's
+ * fixtures add, not merely because such fixtures exist.
+ */
+const COMPLIANT_VERSION = "1.0.0";
 
 type V1Rule = [string, string, string, Record<string, unknown>?];
 
@@ -113,9 +124,9 @@ describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) 
 
   describe.each(suites)("$name", (suite) => {
     // Skips (rather than silently omitting) a suite whose declared version
-    // isn't covered by KEYCARD_FIXTURES_MAX_VERSION, when that's set - see
-    // complianceFixtures.ts. Unset, every suite runs regardless of version.
-    describe.skipIf(!isIncluded(suite.version))(`version ${suite.version}`, () => {
+    // exceeds this suite's own baked-in COMPLIANT_VERSION - see
+    // complianceFixtures.ts's isIncluded.
+    describe.skipIf(!isIncluded(suite.version, COMPLIANT_VERSION))(`version ${suite.version}`, () => {
       const policy = Policy.from(toLegacyDefinition(suite));
       const cases = suite.cases.map((c) => ({
         ...c,

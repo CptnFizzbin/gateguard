@@ -65,16 +65,25 @@ export function isCompatible(fixtureVersion: string, maxSupportedVersion: string
 }
 
 /**
- * Env var used to cap which fixture versions a test run exercises (e.g.
- * `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`) - useful once fixtures
- * for a newer MINOR version exist and an implementation that only targets
- * an older one shouldn't be expected to pass them yet. Unset means "no cap,
- * run every fixture regardless of the version it declares".
+ * Env var that overrides a suite's baked-in `compliantVersion` for one run
+ * (e.g. `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`) - useful for
+ * deliberately narrowing or widening the cap without editing code. Unset
+ * (the common case) means "use whatever version the compliance suite
+ * itself bakes in".
  */
 export const MAX_VERSION_ENV_VAR = "KEYCARD_FIXTURES_MAX_VERSION";
 
-/** True when a fixture declaring `fixtureVersion` should run, given any configured version cap. */
-export function isIncluded(fixtureVersion: string): boolean {
-  const max = process.env[MAX_VERSION_ENV_VAR];
-  return !max || isCompatible(fixtureVersion, max);
+/**
+ * True when a fixture declaring `fixtureVersion` should run against a
+ * compliance suite that bakes in `compliantVersion` as the highest version
+ * its adapter is written against - see e.g. v1ConformanceFixtures.test.ts's
+ * `COMPLIANT_VERSION`. Every compliance suite bakes in its own version
+ * rather than defaulting to "run everything", so a suite whose adapter
+ * hasn't caught up to a newer MINOR version's fixtures skips them
+ * automatically, with no external configuration required;
+ * `MAX_VERSION_ENV_VAR` overrides that baked-in default when set.
+ */
+export function isIncluded(fixtureVersion: string, compliantVersion: string): boolean {
+  const override = process.env[MAX_VERSION_ENV_VAR];
+  return isCompatible(fixtureVersion, override || compliantVersion);
 }

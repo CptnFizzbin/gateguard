@@ -68,22 +68,33 @@ element cannot match such a check (EC-7).
 
 ## Filtering by version
 
-Every suite declares a SemVer `version`. Once fixtures for a newer `MINOR`
-version exist, a test run can cap which ones it exercises — useful for an
-implementation that only targets an older `MINOR` and shouldn't be expected
-to pass fixtures for a newer one it hasn't caught up to yet:
+Every fixture suite declares a SemVer `version`. Each compliance test suite
+bakes in its own `COMPLIANT_VERSION` constant — the highest version its
+adapter is actually written against
+(`v1ConformanceFixtures.test.ts`'s `COMPLIANT_VERSION`,
+`V1ConformanceFixtureTest`'s `COMPLIANT_VERSION`) — and a fixture whose
+declared `version` exceeds it is skipped, not failed, mirroring the
+compatibility rule in SPEC_V1-0-0.md §2 (same `MAJOR`, `MINOR` no higher
+than what's supported; `PATCH` never matters). This is automatic: once
+fixtures for a newer `MINOR` version are added, a compliance suite whose
+adapter hasn't caught up yet skips them with no configuration required,
+rather than failing on behavior it was never meant to support. Bump a
+suite's `COMPLIANT_VERSION` only once its adapter has actually been updated
+to handle whatever the newer version adds — not merely because such
+fixtures now exist.
+
+For a one-off run that deliberately narrows or widens that baked-in ceiling
+without editing code:
 
 - JS: set the `KEYCARD_FIXTURES_MAX_VERSION` env var, e.g.
   `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`.
 - Java: set the `keycard.fixtures.maxVersion` system property, e.g.
   `mvn test -Dkeycard.fixtures.maxVersion=1.0.0`.
 
-A suite whose `version` isn't covered (different `MAJOR`, or a higher
-`MINOR` than the cap) is skipped, not failed — mirroring the compatibility
-rule in SPEC_V1-0-0.md §2 (same `MAJOR`, `MINOR` no higher than what's
-supported; `PATCH` never matters). Leaving the knob unset runs every fixture
-regardless of the version it declares, which is the default today since
-every suite here declares `"1.0.0"`.
+Every suite here declares `"1.0.0"`, and both compliance suites currently
+bake in `COMPLIANT_VERSION = "1.0.0"` too, so today this filtering is a
+no-op in practice — it starts mattering the moment a fixture file declares
+something newer than a given suite's baked-in ceiling.
 
 ## Scope
 
