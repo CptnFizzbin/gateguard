@@ -1,15 +1,18 @@
+import * as semver from "semver";
 import { Action } from "../action";
 import { Subject, SubjectDef, SubjectRef } from "../subject";
 import { Condition, ConditionResolver, CustomConditionChecker } from "../conditions";
 import { BUILTIN_OPERATORS } from "../conditions/ConditionResolver";
 import { PolicyError, PolicyLoadException, PolicyVersionException } from "../errors";
 import type { PolicyDefinition, RuleTuple } from "./PolicyDefinition";
-import { parseSemVer } from "./semver";
 import { DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf } from "./wildcards";
 
-/** The highest MAJOR.MINOR this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
-const SUPPORTED_MAJOR = 1;
-const SUPPORTED_MINOR = 0;
+/** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
+const SUPPORTED_VERSION = "1.0.0";
+const SUPPORTED_MAJOR = semver.major(SUPPORTED_VERSION);
+const SUPPORTED_MINOR = semver.minor(SUPPORTED_VERSION);
+/** Same MAJOR as SUPPORTED_VERSION, MINOR no higher - PATCH is irrelevant either way (§2). */
+const COMPATIBLE_RANGE = `>=${SUPPORTED_MAJOR}.0.0 <${SUPPORTED_MAJOR}.${SUPPORTED_MINOR + 1}.0`;
 
 /**
  * Recursively collects every non-built-in, `$`-prefixed operator name used
@@ -186,13 +189,11 @@ export class Policy<
   }
 
   private static validateVersion(version: string): void {
-    let parsed;
-    try {
-      parsed = parseSemVer(version);
-    } catch (e) {
-      throw new PolicyVersionException(`Invalid policy version "${version}": ${(e as Error).message}`);
-    }
-    if (parsed.major !== SUPPORTED_MAJOR || parsed.minor > SUPPORTED_MINOR) {
+    // §2.1: PATCH (and MINOR) may be omitted - "1"/"1.0" are valid
+    // shorthand for "1.0.0" - so coerce before comparing rather than
+    // requiring a strict three-component string.
+    const coerced = semver.coerce(version);
+    if (!coerced || !semver.satisfies(coerced, COMPATIBLE_RANGE)) {
       throw new PolicyVersionException(
         `Unsupported policy version "${version}": this implementation supports ${SUPPORTED_MAJOR}.0.0 through ${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}.x (SPEC_V1-0-0.md §2).`
       );

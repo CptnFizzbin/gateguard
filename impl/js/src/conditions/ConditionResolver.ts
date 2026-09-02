@@ -24,20 +24,23 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
-interface SubstrPattern {
-  anchorStart: boolean;
-  anchorEnd: boolean;
-  /** Literal segments, in order; consecutive segments are separated by a required run of one-or-more characters (a `*`/`**` in the source pattern). */
-  segments: string[];
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
- * §7.4.6: parses a `$substr` pattern into anchors plus the literal
- * segments between its wildcards. Returns `null` when the pattern is
- * structurally invalid (an unescaped `^` anywhere but the first
- * character, or an unescaped `$` anywhere but the last).
+ * §7.4.6: parses a `$substr` pattern by compiling it to a `RegExp` - the
+ * spec explicitly permits this ("Implementations MAY implement $substr
+ * however they like internally (including compiling it to the host
+ * language's native regex engine, e.g. translating `*`/`**` to `.+` and
+ * escaping literal segments)"). Literal segments are escaped verbatim, a
+ * wildcard becomes `.+` (one-or-more; the `s` flag makes `.` match
+ * newlines too, so it's truly "any character"), and the leading/trailing
+ * anchors carry straight through as regex anchors. Returns `null` when
+ * the pattern is structurally invalid (an unescaped `^` anywhere but the
+ * first character, or an unescaped `$` anywhere but the last).
  */
-function parseSubstrPattern(raw: string): SubstrPattern | null {
+function parseSubstrPattern(raw: string): RegExp | null {
   const n = raw.length;
   let i = 0;
   let anchorStart = false;
@@ -95,59 +98,46 @@ function parseSubstrPattern(raw: string): SubstrPattern | null {
   }
 
   segments.push(current);
-  return { anchorStart, anchorEnd, segments };
+
+  let source = anchorStart ? "^" : "";
+  segments.forEach((seg, idx) => {
+    if (idx > 0) source += ".+";
+    source += escapeRegExp(seg);
+  });
+  if (anchorEnd) source += "$";
+
+  return new RegExp(source, "s");
 }
 
-/** §7.4.6: matches `subject` against an already-parsed `$substr` pattern. */
-function matchesSubstrPattern(subject: string, pattern: SubstrPattern): boolean {
-  const n = subject.length;
-  const lastIdx = pattern.segments.length - 1;
-  let cursor = 0;
-
-  for (let idx = 0; idx <= lastIdx; idx++) {
-    const seg = pattern.segments[idx];
-    const isFirst = idx === 0;
-    const isLast = idx === lastIdx;
-    const minStart = isFirst ? 0 : cursor + 1; // a wildcard requires 1+ characters between segments
-    const anchoredStart = isFirst && pattern.anchorStart;
-    const anchoredEnd = isLast && pattern.anchorEnd;
-
-    if (anchoredStart && anchoredEnd) {
-      if (subject.length !== seg.length || subject !== seg) return false;
-      cursor = n;
-      continue;
-    }
-
-    if (anchoredStart) {
-      if (!subject.startsWith(seg)) return false;
-      cursor = seg.length;
-      continue;
-    }
-
-    if (anchoredEnd) {
-      const start = n - seg.length;
-      if (start < minStart || subject.slice(start) !== seg) return false;
-      cursor = n;
-      continue;
-    }
-
-    const found = subject.indexOf(seg, minStart);
-    if (found === -1) return false;
-    cursor = found + seg.length;
-  }
-
-  return true;
-}
-
-/** Every `$`-prefixed key this resolver understands natively - anything else starting with `$` is a custom operator lookup (§7.4.12). */
-const BUILTIN_OPERATORS = new Set([
-  "$eq", "$ne", "$gt", "$gte", "$lt", "$lte",
-  "$in", "$has", "$substr", "$or", "$and", "$not", "$field",
-]);
-
-export { BUILTIN_OPERATORS };
+/** A built-in operator's implementation - takes the resolving instance (for recursive `evaluate()` calls and diagnostics) plus the subject/operand. */
+type BuiltinOperator = (resolver: ConditionResolver, subject: any, value: any) => boolean;
 
 export class ConditionResolver {
+  /**
+   * Every operator this resolver understands natively (§7.4.1-§7.4.11),
+   * keyed by its `$`-prefixed name - the single source of truth for both
+   * dispatch and "is this name built-in" (no separately-maintained name
+   * list to fall out of sync with it).
+   */
+  private static readonly BUILTIN_OPERATOR_IMPLS: Record<string, BuiltinOperator> = {
+    $eq: (r, s, v) => valuesEqual(s, v),
+    $ne: (r, s, v) => !valuesEqual(s, v),
+    $gt: (r, s, v) => r.numericCompare("$gt", s, v, (a, b) => a > b),
+    $gte: (r, s, v) => r.numericCompare("$gte", s, v, (a, b) => a >= b),
+    $lt: (r, s, v) => r.numericCompare("$lt", s, v, (a, b) => a < b),
+    $lte: (r, s, v) => r.numericCompare("$lte", s, v, (a, b) => a <= b),
+    $in: (r, s, v) => r.inCheck(s, v),
+    $has: (r, s, v) => r.hasCheck(s, v),
+    $substr: (r, s, v) => r.substrCheck(s, v),
+    $or: (r, s, v) => r.orCheck(s, v),
+    $and: (r, s, v) => r.andCheck(s, v),
+    $not: (r, s, v) => !r.evaluate(s, v),
+    $field: (r, s, v) => r.fieldOpCheck(s, v),
+  };
+
+  /** Every `$`-prefixed key this resolver understands natively - anything else starting with `$` is a custom operator lookup (§7.4.12). */
+  static readonly BUILTIN_OPERATORS: Set<string> = new Set(Object.keys(ConditionResolver.BUILTIN_OPERATOR_IMPLS));
+
   private customCheckers: CustomConditionChecker;
   private declaredCustomOperators: Set<string>;
 
@@ -188,42 +178,22 @@ export class ConditionResolver {
     return true;
   }
 
+  /**
+   * §7.4.12, §7.5: any key starting with "$" is an operator lookup, never
+   * a field name - built-in and custom operators are both resolved the
+   * same way, by name, against their respective registries.
+   */
   private evaluateKey(subject: any, key: string, value: any): boolean {
-    switch (key) {
-      case "$eq":
-        return valuesEqual(subject, value);
-      case "$ne":
-        return !valuesEqual(subject, value);
-      case "$gt":
-        return this.numericCompare("$gt", subject, value, (a, b) => a > b);
-      case "$gte":
-        return this.numericCompare("$gte", subject, value, (a, b) => a >= b);
-      case "$lt":
-        return this.numericCompare("$lt", subject, value, (a, b) => a < b);
-      case "$lte":
-        return this.numericCompare("$lte", subject, value, (a, b) => a <= b);
-      case "$in":
-        return this.inCheck(subject, value);
-      case "$has":
-        return this.hasCheck(subject, value);
-      case "$substr":
-        return this.substrCheck(subject, value);
-      case "$or":
-        return this.orCheck(subject, value);
-      case "$and":
-        return this.andCheck(subject, value);
-      case "$not":
-        return !this.evaluate(subject, value);
-      case "$field":
-        return this.fieldOpCheck(subject, value);
-      default:
-        // §7.5: any key starting with "$" MUST be treated as an operator,
-        // never a field name, whether or not it's recognized.
-        if (key.startsWith("$")) {
-          return this.customOperatorCheck(subject, key, value);
-        }
-        return this.fieldCheck(subject, key, value);
+    if (!key.startsWith("$")) {
+      return this.fieldCheck(subject, key, value);
     }
+
+    const builtin = ConditionResolver.BUILTIN_OPERATOR_IMPLS[key];
+    if (builtin) {
+      return builtin(this, subject, value);
+    }
+
+    return this.customOperatorCheck(subject, key, value);
   }
 
   /** §7.4.3: $gt/$gte/$lt/$lte - numeric-only, IEEE-754 double semantics. */
@@ -264,15 +234,15 @@ export class ConditionResolver {
       logTypeIssue("$substr", `expected a string pattern, got ${typeof pattern}`);
       return false;
     }
-    const parsed = parseSubstrPattern(pattern);
-    if (!parsed) {
+    const compiled = parseSubstrPattern(pattern);
+    if (!compiled) {
       logTypeIssue("$substr", `malformed pattern: ${JSON.stringify(pattern)}`);
       return false;
     }
     if (subject === null || subject === undefined) {
       return false;
     }
-    return matchesSubstrPattern(String(subject), parsed);
+    return compiled.test(String(subject));
   }
 
   /** §7.4.7: $or - operand must be an array; `$or: []` is vacuously false. */
@@ -319,7 +289,21 @@ export class ConditionResolver {
     return this.evaluate(subject[fieldName], condition);
   }
 
-  /** §7.4.12: a custom `$op` - delegates to a registered checker, or evaluates false (EC-13/EC-15). */
+  /**
+   * §7.4.12: a custom `$op` - delegates to a registered checker, or
+   * evaluates false (EC-13/EC-15).
+   *
+   * Note on §3.2.3 vs. EC-15: §3.2.3's closing sentence ("implementations
+   * MUST throw a PolicyLoadException if a behavior is not provided to the
+   * constructor") read literally would mean any cataloged-but-unregistered
+   * operator throws at construction time - but EC-15 explicitly requires
+   * the opposite (resolves to false, with a diagnostic, and MUST NOT
+   * throw), and that's also what
+   * test/fixtures/v1/09-custom-operators.yaml's "cataloged but
+   * never-registered" case expects. This method follows EC-15 and the
+   * conformance suite; treat §3.2.3's closing sentence as an error in the
+   * spec prose rather than normative behavior to implement.
+   */
   private customOperatorCheck(subject: any, op: string, value: any): boolean {
     const checker = this.customCheckers[op];
     if (checker) {
@@ -336,3 +320,5 @@ export class ConditionResolver {
     return false;
   }
 }
+
+export const BUILTIN_OPERATORS = ConditionResolver.BUILTIN_OPERATORS;

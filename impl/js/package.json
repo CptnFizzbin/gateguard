@@ -20,6 +20,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/semver": "^7.8.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/ui": "^4.1.11",
@@ -28,5 +29,8 @@
     "vitest": "^4.1.11",
     "yaml": "^2.9.0"
   },
-  "packageManager": "yarn@4.18.0+sha512.fcb8716fe7cd0eece141ffc18b92193a9df9204c1ba83189c288835223fc0bbe64af473bab0d5e9927a7daeb5caf2bb07eb2787cc9338ca040ea125f2a1f2f7e"
+  "packageManager": "yarn@4.18.0+sha512.fcb8716fe7cd0eece141ffc18b92193a9df9204c1ba83189c288835223fc0bbe64af473bab0d5e9927a7daeb5caf2bb07eb2787cc9338ca040ea125f2a1f2f7e",
+  "dependencies": {
+    "semver": "^7.8.5"
+  }
 }

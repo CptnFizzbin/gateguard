@@ -2,6 +2,7 @@ import { Action } from "../action";
 import { Subject, SubjectDef } from "../subject";
 import { Condition } from "../conditions";
 import type { Rule, RuleTuple, Meta, Effect, PolicyDefinition } from "../policy/PolicyDefinition";
+import { Policy } from "../policy/Policy";
 import { PolicyArgumentError } from "../errors";
 import { DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf } from "../policy/wildcards";
 
@@ -35,8 +36,8 @@ export class PolicyBuilder<
     return this.addRule("deny", action, subject, conditions);
   }
 
-  build() {
-    throw new Error("Not yet implemented");
+  build(): Policy<TActions, TSubjects> {
+    return new Policy(this.buildDef());
   }
 
   buildDef(): PolicyDefinition<TActions, TSubjects> {
