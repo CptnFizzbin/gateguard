@@ -1,0 +1,59 @@
+version: "1.0.0"
+name: "unregistered, undeclared custom operator always evaluates false (§7.4.12, EC-13)"
+description: >
+  $hasRole isn't a built-in operator. With no meta.customOperators catalog
+  declared and no checker registered at runtime, it MUST evaluate to false -
+  never a no-op true, and never treated as a field name.
+rules:
+  - [allow, Read, Article, { $hasRole: admin }]
+
+cases:
+  - name: "unregistered custom operator: denied"
+    subjectData: { anything: 1 }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "still denied even with no instance data at all"
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "a cataloged but never-registered custom operator still evaluates false (§7.4.12, EC-15)"
+description: >
+  Declaring $hasRole in meta.customOperators documents the operator; it
+  does not implement it. With no checker registered at runtime, evaluation
+  still resolves to false (the only observable difference from EC-13 is a
+  required console diagnostic, which isn't expressible as an allow/deny
+  case).
+meta:
+  customOperators: [$hasRole]
+rules:
+  - [allow, Read, Article, { $hasRole: admin }]
+
+cases:
+  - name: "cataloged but unregistered: denied"
+    subjectData: { anything: 1 }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "a $-prefixed key is always an operator, never a field name, even if unregistered (§7.4.12, §7.5)"
+description: >
+  A subject that happens to have a literal "$hasRole" field is irrelevant -
+  the condition key is resolved as an operator lookup, not a field lookup,
+  and an unregistered operator is always false regardless of what data the
+  subject carries.
+rules:
+  - [allow, Read, Article, { $hasRole: admin }]
+
+cases:
+  - name: "a literal $hasRole field on the subject is not consulted"
+    subjectData: { "$hasRole": admin }
+    action: Read
+    subject: Article
+    expected: deny

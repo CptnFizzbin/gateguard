@@ -1,0 +1,206 @@
+version: "1.0.0"
+name: "$substr: unanchored literal (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: Rust } }]
+
+cases:
+  - name: "substring present: allowed"
+    subjectData: { title: "Getting Started with Rust" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "substring absent: denied"
+    subjectData: { title: "Java Basics" }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "subject is coerced via String(subject); no match here, but not a type issue"
+    subjectData: { title: 12345 }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "missing field: denied"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: start anchor (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^Getting" } }]
+
+cases:
+  - name: "literal segment touches the start: allowed"
+    subjectData: { title: "Getting Started" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "literal segment doesn't touch the start: denied"
+    subjectData: { title: "Not Getting Started" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: end anchor (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "Guide$" } }]
+
+cases:
+  - name: "literal segment touches the end: allowed"
+    subjectData: { title: "Rust Guide" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "literal segment doesn't touch the end: denied"
+    subjectData: { title: "Guide to Rust" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: both anchors (exact match) (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^Rust$" } }]
+
+cases:
+  - name: "exact match: allowed"
+    subjectData: { title: Rust }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "extra trailing text: denied"
+    subjectData: { title: "Rust Guide" }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "extra leading text: denied"
+    subjectData: { title: "About Rust" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: wildcard requires one or more characters (§7.4.6)"
+description: >
+  * and ** are both "one or more characters" - the lazy/greedy distinction
+  has no observable effect on a match/no-match result (v1 has no
+  capture/extraction feature).
+rules:
+  - [allow, Read, Article, { title: { $substr: "^A*Z$" } }]
+
+cases:
+  - name: "one character fills the gap: allowed"
+    subjectData: { title: AxZ }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "several characters fill the gap: allowed"
+    subjectData: { title: AxyzZ }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "zero characters between A and Z: denied, the wildcard needs at least one"
+    subjectData: { title: AZ }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: greedy ** is match-equivalent to lazy * (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^A**Z$" } }]
+
+cases:
+  - name: "one character fills the gap: allowed"
+    subjectData: { title: AxZ }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "zero characters between A and Z: denied"
+    subjectData: { title: AZ }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: escaped special characters are literal (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "\\^literal" } }]
+
+cases:
+  - name: "the escaped caret is matched as a literal character, not an anchor, so it can appear mid-string"
+    subjectData: { title: "a ^literal caret" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "still an ordinary, unanchored substring match"
+    subjectData: { title: "^literal at the start" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "the literal text isn't present at all: denied"
+    subjectData: { title: "no match here" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: an invalid pattern is a type issue, always false (§7.4.6)"
+description: >
+  An unescaped ^ anywhere but the first character, or an unescaped $
+  anywhere but the last, is a structurally invalid pattern.
+rules:
+  - [allow, Read, Article, { title: { $substr: "mid^dle" } }]
+
+cases:
+  - name: "invalid pattern never matches, regardless of subject content"
+    subjectData: { title: "mid^dle exactly" }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "invalid pattern never matches unrelated content either"
+    subjectData: { title: "anything" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: a null or missing subject is an ordinary non-match, not a type issue (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: x } }]
+
+cases:
+  - name: "explicit null subject value: denied"
+    subjectData: { title: null }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "missing field: denied"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny

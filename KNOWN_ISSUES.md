@@ -159,6 +159,20 @@ revision, not existing behavior that's merely wrong:
   predates this revision. They'll need rewriting to the new `rules`/`meta`
   shape with a SemVer `version` string as part of the implementation
   follow-up, not just a schema change in the two `Policy` classes.
+- **`test/fixtures/v1/` is a new, spec-native conformance suite (see the
+  README there) that both `impl/js` and `impl/java` now read**
+  (`impl/js/tests/integration/v1ConformanceFixtures.test.ts`,
+  `impl/java/.../integration/V1ConformanceFixtureTest.java`), through a
+  best-effort adapter that reshapes each fixture's v1 `rules`/`meta` into
+  the current pre-v1 `allow`/`deny` shape. Every case above whose behavior
+  depends on a gap tracked elsewhere in this document (last-rule-wins
+  ordering, the `_ANY_` wildcard token, `meta` catalogs, `$substr`,
+  `$field`, the Java missing-field/`null` conflation, ...) currently fails
+  through that adapter — that's expected, and is exactly the set of gaps
+  this document already tracks, not a new one. Once an implementation
+  adopts the v1 schema natively, replace its adapter with passing the
+  parsed definition straight through, at which point these fixtures should
+  start passing for real.
 
 ## `SubjectDef` evaluation (EC-9)
 
