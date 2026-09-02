@@ -1,6 +1,4 @@
-package com.cptnfizzbin.keycard.conditions.groupConditions;
-
-import com.cptnfizzbin.keycard.conditions.stringConditions.StringConditions;
+package com.cptnfizzbin.keycard.conditions;
 
 import java.util.Collection;
 

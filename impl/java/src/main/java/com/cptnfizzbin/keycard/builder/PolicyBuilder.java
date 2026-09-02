@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 public final class PolicyBuilder {
-    /** The v1 SemVer this builder implements - stamped onto every buildDef() output, per SPEC_V1-0-0.md §2. */
-    public static final String BUILDER_VERSION = "1.0.0";
+    /** The v1 SemVer this builder implements - stamped onto every buildDef() output, per SPEC_V1-0-0.md §2. Single-sourced from {@link Policy#SUPPORTED_VERSION} so the two can never drift apart. */
+    public static final String BUILDER_VERSION = Policy.SUPPORTED_VERSION.toString();
 
     private final List<PolicyDefinition.Rule> rules = new ArrayList<>();
     private final PolicyDefinition.Meta meta;

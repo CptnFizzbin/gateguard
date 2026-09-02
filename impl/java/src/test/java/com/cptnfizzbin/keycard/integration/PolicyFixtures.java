@@ -1,6 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
-import com.cptnfizzbin.keycard.conditions.CustomConditionChecker;
+import com.cptnfizzbin.keycard.conditions.ConditionChecker;
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
 
 import java.io.IOException;
@@ -34,7 +34,7 @@ final class PolicyFixtures {
      * test suite) can implement; declaring it in meta.customOperators
      * documents it but doesn't wire up behavior. Keyed by fixture file name.
      */
-    static Map<String, CustomConditionChecker> customCheckersFor(String fixtureFileName) {
+    static Map<String, ConditionChecker> checkersFor(String fixtureFileName) {
         if ("policy-05-advanced.yaml".equals(fixtureFileName)) {
             return Map.of("$startsWithUpper", (subject, value) ->
                 subject instanceof String && !((String) subject).isEmpty()

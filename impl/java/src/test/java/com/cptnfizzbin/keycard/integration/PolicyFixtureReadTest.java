@@ -55,7 +55,7 @@ public class PolicyFixtureReadTest {
     @Test
     public void policyFromDefinitionToDefinitionRoundTrips() throws IOException {
         PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyPath);
-        Policy policy = Policy.from(policyDef, PolicyFixtures.customCheckersFor(policyName));
+        Policy policy = Policy.from(policyDef, PolicyFixtures.checkersFor(policyName));
 
         assertEquals(policyDef, policy.toDefinition());
     }
@@ -64,6 +64,6 @@ public class PolicyFixtureReadTest {
     public void fromDtoToDtoAliasesRoundTrip() throws IOException {
         PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyPath);
 
-        assertEquals(policyDef, Policy.fromDto(policyDef, PolicyFixtures.customCheckersFor(policyName)).toDto());
+        assertEquals(policyDef, Policy.fromDto(policyDef, PolicyFixtures.checkersFor(policyName)).toDto());
     }
 }

@@ -1,4 +1,4 @@
-package com.cptnfizzbin.keycard.conditions.numberConditions;
+package com.cptnfizzbin.keycard.conditions;
 
 public final class NumberConditions {
     private NumberConditions() {}

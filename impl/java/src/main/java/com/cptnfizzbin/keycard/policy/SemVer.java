@@ -38,4 +38,9 @@ public record SemVer(int major, int minor, int patch) {
     public boolean isCompatibleWith(SemVer supported) {
         return major == supported.major && minor <= supported.minor;
     }
+
+    @Override
+    public String toString() {
+        return major + "." + minor + "." + patch;
+    }
 }

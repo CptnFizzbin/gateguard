@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "impl/js/**"
-      - "test/fixtures/v1/**"
+      - "test/fixtures/**"
+      - ".github/workflows/js.yml"
   pull_request:
     paths:
       - "impl/js/**"
-      - "test/fixtures/v1/**"
+      - "test/fixtures/**"
+      - ".github/workflows/js.yml"
 
 defaults:
   run:

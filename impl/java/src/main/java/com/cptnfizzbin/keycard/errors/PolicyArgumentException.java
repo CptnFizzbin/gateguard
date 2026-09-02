@@ -11,5 +11,5 @@ import lombok.experimental.StandardException;
  * to eventually catch it.
  */
 @StandardException
-public class PolicyArgumentException extends RuntimeException {
+public class PolicyArgumentException extends IllegalArgumentException {
 }

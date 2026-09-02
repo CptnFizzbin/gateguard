@@ -70,7 +70,7 @@ public final class Conditions {
         return condition;
     }
 
-    /** §7.4.6: $substr - a small, non-regex substring pattern language (SPEC_V1-0-0.md §7.4.6 replaces v0's $rgx). */
+    /** §7.4.6: $substr - a small, non-regex substring pattern language. */
     public static <T, R> Map<String, Object> substr(FieldGetter<T, R> getter, String pattern) {
         String fieldName = extractFieldName(getter);
         Map<String, Object> condition = new HashMap<>();

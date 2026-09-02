@@ -4,7 +4,7 @@ import com.cptnfizzbin.keycard.action.Action;
 import com.cptnfizzbin.keycard.subject.SubjectDef;
 import com.cptnfizzbin.keycard.subject.SubjectRef;
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
-import com.cptnfizzbin.keycard.conditions.CustomConditionChecker;
+import com.cptnfizzbin.keycard.conditions.ConditionChecker;
 import com.cptnfizzbin.keycard.errors.PolicyException;
 import com.cptnfizzbin.keycard.errors.PolicyLoadException;
 import com.cptnfizzbin.keycard.errors.PolicyVersionException;
@@ -15,17 +15,23 @@ import java.util.Map;
 import java.util.Set;
 
 public final class Policy {
-    /** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
-    private static final SemVer SUPPORTED_VERSION = SemVer.parse("1.0.0");
+    /**
+     * The highest version this implementation supports natively -
+     * SPEC_V1-0-0.md §2. PATCH never affects compatibility. Also the
+     * single source of truth for {@link com.cptnfizzbin.keycard.builder.PolicyBuilder#BUILDER_VERSION},
+     * so a builder can never stamp a version this same implementation
+     * would then refuse to load.
+     */
+    public static final SemVer SUPPORTED_VERSION = SemVer.parse("1.0.0");
 
     private final PolicyDefinition definition;
     private final ConditionResolver resolver;
 
     public Policy(PolicyDefinition definition) {
-        this(definition, (Map<String, CustomConditionChecker>) null);
+        this(definition, (Map<String, ConditionChecker>) null);
     }
 
-    public Policy(PolicyDefinition definition, Map<String, CustomConditionChecker> customCheckers) {
+    public Policy(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
         validateVersion(definition.getVersion());
         validateRules(definition);
 
@@ -34,7 +40,7 @@ public final class Policy {
         Set<String> declaredCustomOperators = meta != null && meta.getCustomOperators() != null
             ? new HashSet<>(meta.getCustomOperators())
             : null;
-        this.resolver = new ConditionResolver(customCheckers, declaredCustomOperators);
+        this.resolver = new ConditionResolver(checkers, declaredCustomOperators);
     }
 
     /** Advanced escape hatch: supply an already-built {@link ConditionResolver} directly. */
@@ -56,8 +62,8 @@ public final class Policy {
         return new Policy(definition);
     }
 
-    public static Policy from(PolicyDefinition definition, Map<String, CustomConditionChecker> customCheckers) {
-        return new Policy(definition, customCheckers);
+    public static Policy from(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
+        return new Policy(definition, checkers);
     }
 
     public static Policy from(PolicyDefinition definition, ConditionResolver resolver) {
@@ -70,8 +76,8 @@ public final class Policy {
     }
 
     /** Alias of {@link #from(PolicyDefinition, Map)}. */
-    public static Policy fromDto(PolicyDefinition definition, Map<String, CustomConditionChecker> customCheckers) {
-        return from(definition, customCheckers);
+    public static Policy fromDto(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
+        return from(definition, checkers);
     }
 
     /** Alias of {@link #from(PolicyDefinition, ConditionResolver)}. */

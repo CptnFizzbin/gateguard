@@ -1,6 +1,4 @@
-package com.cptnfizzbin.keycard.conditions.logicConditions;
-
-import com.cptnfizzbin.keycard.conditions.ConditionResolver;
+package com.cptnfizzbin.keycard.conditions;
 
 import java.util.List;
 

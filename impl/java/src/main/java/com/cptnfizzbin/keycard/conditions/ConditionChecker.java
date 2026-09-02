@@ -9,6 +9,6 @@ package com.cptnfizzbin.keycard.conditions;
  * separately by the host application via this interface.
  */
 @FunctionalInterface
-public interface CustomConditionChecker {
+public interface ConditionChecker {
     boolean check(Object subject, Object value);
 }

@@ -1,9 +1,5 @@
 package com.cptnfizzbin.keycard.conditions;
 
-import com.cptnfizzbin.keycard.conditions.stringConditions.StringConditions;
-import com.cptnfizzbin.keycard.conditions.groupConditions.GroupConditions;
-import com.cptnfizzbin.keycard.conditions.logicConditions.LogicConditions;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,25 +45,25 @@ public final class ConditionResolver {
     /** Every `$`-prefixed key this resolver understands natively - anything else starting with "$" is a custom operator lookup (§7.4.12). */
     public static final Set<String> BUILTIN_OPERATORS = BUILTIN_OPERATOR_IMPLS.keySet();
 
-    private final Map<String, CustomConditionChecker> customCheckers;
+    private final Map<String, ConditionChecker> checkers;
     private final Set<String> declaredCustomOperators;
 
     public ConditionResolver() {
         this(null, null);
     }
 
-    public ConditionResolver(Map<String, CustomConditionChecker> customCheckers) {
-        this(customCheckers, null);
+    public ConditionResolver(Map<String, ConditionChecker> checkers) {
+        this(checkers, null);
     }
 
     /**
-     * @param customCheckers runtime checkers for custom $op operators (§7.4.12).
+     * @param checkers runtime checkers for custom $op operators (§7.4.12).
      * @param declaredCustomOperators the policy's meta.customOperators catalog, if any -
      *   used only to distinguish EC-13 (uncataloged, no diagnostic) from EC-15
      *   (cataloged but never registered, diagnostic required).
      */
-    public ConditionResolver(Map<String, CustomConditionChecker> customCheckers, Set<String> declaredCustomOperators) {
-        this.customCheckers = customCheckers != null ? Map.copyOf(customCheckers) : Map.of();
+    public ConditionResolver(Map<String, ConditionChecker> checkers, Set<String> declaredCustomOperators) {
+        this.checkers = checkers != null ? Map.copyOf(checkers) : Map.of();
         this.declaredCustomOperators = declaredCustomOperators != null ? Set.copyOf(declaredCustomOperators) : Set.of();
     }
 
@@ -235,7 +231,7 @@ public final class ConditionResolver {
      * spec prose rather than normative behavior to implement.
      */
     private boolean customOperatorCheck(Object subject, String op, Object value) {
-        CustomConditionChecker checker = customCheckers.get(op);
+        ConditionChecker checker = checkers.get(op);
         if (checker != null) {
             return checker.check(subject, value);
         }
@@ -276,6 +272,16 @@ public final class ConditionResolver {
      * unescaped "$" anywhere but the last).
      */
     private static final class SubstrPattern {
+        // Private-use Unicode stand-ins for each escaped special character -
+        // resolving escapes to these first (via plain String.replace calls)
+        // lets the rest of parsing work with simple String operations
+        // (indexOf/split) instead of a hand-rolled character scan, since a
+        // wildcard/anchor split can't accidentally trip over an escaped one.
+        private static final String ESC_BACKSLASH = "";
+        private static final String ESC_CARET = "";
+        private static final String ESC_DOLLAR = "";
+        private static final String ESC_STAR = "";
+
         private final Pattern compiled;
 
         private SubstrPattern(Pattern compiled) {
@@ -283,63 +289,27 @@ public final class ConditionResolver {
         }
 
         static SubstrPattern parse(String raw) {
-            int n = raw.length();
-            int i = 0;
-            boolean anchorStart = false;
+            // Resolve "\\" first so a literal backslash immediately before a
+            // special character (e.g. "\\*", an escaped backslash followed by
+            // a real wildcard) isn't mistaken for that character's own escape.
+            String resolved = raw
+                .replace("\\\\", ESC_BACKSLASH)
+                .replace("\\^", ESC_CARET)
+                .replace("\\$", ESC_DOLLAR)
+                .replace("\\*", ESC_STAR);
+            // Anything left over as a literal "^"/"$" is genuinely unescaped.
+            // An unescaped "^" anywhere but the first character, or an
+            // unescaped "$" anywhere but the last, is an invalid pattern.
+            if (resolved.lastIndexOf('^') > 0) return null;
+            int firstDollar = resolved.indexOf('$');
+            if (firstDollar != -1 && firstDollar != resolved.length() - 1) return null;
 
-            if (n > 0 && raw.charAt(0) == '^') {
-                anchorStart = true;
-                i = 1;
-            }
+            boolean anchorStart = !resolved.isEmpty() && resolved.charAt(0) == '^';
+            boolean anchorEnd = !resolved.isEmpty() && resolved.charAt(resolved.length() - 1) == '$';
+            String body = resolved.substring(anchorStart ? 1 : 0, resolved.length() - (anchorEnd ? 1 : 0));
 
-            List<String> segments = new java.util.ArrayList<>();
-            StringBuilder current = new StringBuilder();
-            boolean anchorEnd = false;
-
-            while (i < n) {
-                char ch = raw.charAt(i);
-
-                if (ch == '\\') {
-                    char next = i + 1 < n ? raw.charAt(i + 1) : '\0';
-                    if (next == '^' || next == '$' || next == '*' || next == '\\') {
-                        current.append(next);
-                        i += 2;
-                    } else {
-                        // A trailing "\" with nothing following, or "\" before
-                        // a non-special character, is a literal "\".
-                        current.append('\\');
-                        i += 1;
-                    }
-                    continue;
-                }
-
-                if (ch == '*') {
-                    int j = i + 1;
-                    if (j < n && raw.charAt(j) == '*') j += 1; // "*" and "**" are match-equivalent.
-                    segments.add(current.toString());
-                    current = new StringBuilder();
-                    i = j;
-                    continue;
-                }
-
-                if (ch == '^') {
-                    return null; // unescaped "^" not at the start
-                }
-
-                if (ch == '$') {
-                    if (i == n - 1) {
-                        anchorEnd = true;
-                        i += 1;
-                        continue;
-                    }
-                    return null; // unescaped "$" not at the end
-                }
-
-                current.append(ch);
-                i += 1;
-            }
-
-            segments.add(current.toString());
+            // "*"/"**" (or any longer run) are match-equivalent wildcards.
+            String[] segments = body.split("\\*+", -1);
 
             // Translate to a regex: each literal segment quoted verbatim, a
             // wildcard becomes ".+" (one-or-more, DOTALL so it's truly "any
@@ -347,13 +317,22 @@ public final class ConditionResolver {
             // through as regex anchors.
             StringBuilder regex = new StringBuilder();
             if (anchorStart) regex.append('^');
-            for (int idx = 0; idx < segments.size(); idx++) {
+            for (int idx = 0; idx < segments.length; idx++) {
                 if (idx > 0) regex.append(".+");
-                regex.append(Pattern.quote(segments.get(idx)));
+                regex.append(Pattern.quote(unescape(segments[idx])));
             }
             if (anchorEnd) regex.append('$');
 
             return new SubstrPattern(Pattern.compile(regex.toString(), Pattern.DOTALL));
+        }
+
+        /** Substitutes each escape sentinel back to the literal character it stands for. */
+        private static String unescape(String segment) {
+            return segment
+                .replace(ESC_BACKSLASH, "\\")
+                .replace(ESC_CARET, "^")
+                .replace(ESC_DOLLAR, "$")
+                .replace(ESC_STAR, "*");
         }
 
         boolean matches(String subject) {

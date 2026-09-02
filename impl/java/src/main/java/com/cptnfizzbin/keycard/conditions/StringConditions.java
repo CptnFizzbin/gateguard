@@ -1,4 +1,4 @@
-package com.cptnfizzbin.keycard.conditions.stringConditions;
+package com.cptnfizzbin.keycard.conditions;
 
 public final class StringConditions {
     private StringConditions() {}
