@@ -13,9 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 
@@ -39,7 +37,7 @@ public class PolicyFixtureCaseTest {
             }
 
             PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyFile);
-            for (PolicyFixtures.TestCase testCase : PolicyFixtures.loadTestCases(testFile)) {
+            for (ComplianceFixtures.TestCase testCase : PolicyFixtures.loadTestCases(testFile)) {
                 params.add(new Object[] { policyFile.getFileName().toString(), testCase.name(), policyDef, testCase });
             }
         }
@@ -47,9 +45,11 @@ public class PolicyFixtureCaseTest {
     }
 
     private final PolicyDefinition policyDef;
-    private final PolicyFixtures.TestCase testCase;
+    private final ComplianceFixtures.TestCase testCase;
 
-    public PolicyFixtureCaseTest(String policyName, String caseName, PolicyDefinition policyDef, PolicyFixtures.TestCase testCase) {
+    public PolicyFixtureCaseTest(
+        String policyName, String caseName, PolicyDefinition policyDef, ComplianceFixtures.TestCase testCase
+    ) {
         this.policyDef = policyDef;
         this.testCase = testCase;
     }
@@ -58,15 +58,6 @@ public class PolicyFixtureCaseTest {
     public void resolvesExpectedResult() {
         Policy policy = Policy.from(policyDef);
 
-        boolean actual;
-        if (testCase.subjectData() != null) {
-            Map<String, Object> subjectMap = new HashMap<>(testCase.subjectData());
-            subjectMap.put("__name", testCase.subject());
-            actual = policy.can(testCase.action(), subjectMap);
-        } else {
-            actual = policy.can(testCase.action(), testCase.subject());
-        }
-
-        assertEquals(testCase.name(), testCase.expected(), actual);
+        assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }
 }

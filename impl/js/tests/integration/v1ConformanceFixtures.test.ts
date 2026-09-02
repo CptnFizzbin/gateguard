@@ -3,6 +3,7 @@ import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
 import { Policy, PolicyDefinition } from "../../src";
+import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
 
 /**
  * Reads the v1 conformance suite under test/fixtures/v1 (see the README
@@ -25,6 +26,10 @@ import { Policy, PolicyDefinition } from "../../src";
  * visible, not a defect in the fixtures. Once `impl/js` adopts the v1
  * schema natively, this adapter should be replaced with passing the parsed
  * definition straight through.
+ *
+ * Discovery, subject-argument construction, and version filtering are
+ * shared with every other compliance suite via ./complianceFixtures - see
+ * that module for the KEYCARD_FIXTURES_MAX_VERSION knob this suite honors.
  */
 
 const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/v1");
@@ -54,11 +59,7 @@ interface FixtureFile {
 }
 
 function discoverFixtureFiles(): FixtureFile[] {
-  return fs
-    .readdirSync(FIXTURES_DIR)
-    .filter((f) => f.endsWith(".yaml"))
-    .sort()
-    .map((fileName) => ({ fileName, filePath: path.join(FIXTURES_DIR, fileName) }));
+  return listYamlFiles(FIXTURES_DIR).map((filePath) => ({ fileName: path.basename(filePath), filePath }));
 }
 
 function loadSuites(filePath: string): V1Suite[] {
@@ -111,18 +112,19 @@ describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) 
   });
 
   describe.each(suites)("$name", (suite) => {
-    const policy = Policy.from(toLegacyDefinition(suite));
-    const cases = suite.cases.map((c) => ({
-      ...c,
-      name: c.name ?? `${c.action} / ${c.subject} -> ${c.expected}`,
-    }));
+    // Skips (rather than silently omitting) a suite whose declared version
+    // isn't covered by KEYCARD_FIXTURES_MAX_VERSION, when that's set - see
+    // complianceFixtures.ts. Unset, every suite runs regardless of version.
+    describe.skipIf(!isIncluded(suite.version))(`version ${suite.version}`, () => {
+      const policy = Policy.from(toLegacyDefinition(suite));
+      const cases = suite.cases.map((c) => ({
+        ...c,
+        name: c.name ?? `${c.action} / ${c.subject} -> ${c.expected}`,
+      }));
 
-    test.each(cases)("$name", (testCase) => {
-      const subjectArg = testCase.subjectData
-        ? { ...testCase.subjectData, __name: testCase.subject }
-        : testCase.subject;
-
-      expect(policy.can(testCase.action, subjectArg)).toBe(testCase.expected === "allow");
+      test.each(cases)("$name", (testCase) => {
+        expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected === "allow");
+      });
     });
   });
 });

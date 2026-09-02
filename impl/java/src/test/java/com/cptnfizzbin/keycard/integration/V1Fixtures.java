@@ -1,7 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
-import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,7 +9,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Shared loading helpers for the v1 conformance fixtures under
@@ -36,37 +34,31 @@ import java.util.stream.Collectors;
  * a defect in the fixtures. Once impl/java adopts the v1 schema natively,
  * this adapter should be replaced with passing the parsed definition
  * straight through.
+ *
+ * File discovery, YAML parsing, the per-case shape, and can()-resolution
+ * are shared with every other compliance suite via {@link ComplianceFixtures}.
  */
 final class V1Fixtures {
     private V1Fixtures() {}
 
     static final Path FIXTURES_DIR = Paths.get("../../test/fixtures/v1");
 
-    private static final Yaml YAML = new Yaml();
-
     /** All `*.yaml` fixture files under test/fixtures/v1, sorted by name. */
     static List<Path> discoverFixtureFiles() throws IOException {
-        try (var stream = Files.list(FIXTURES_DIR)) {
-            return stream
-                .filter(p -> p.getFileName().toString().endsWith(".yaml"))
-                .sorted()
-                .collect(Collectors.toList());
-        }
+        return ComplianceFixtures.discoverYamlFiles(FIXTURES_DIR, p -> true);
     }
 
-    /** One `{ action, subject, subjectData?, expected }` case from a suite's `cases:` list. */
-    record TestCase(String name, String action, String subject, Map<String, Object> subjectData, boolean expected) {}
-
-    /** One `---`-separated `{ name, rules, cases }` document from a fixture file. */
-    record Suite(String name, PolicyDefinition legacyDefinition, List<TestCase> cases) {}
+    /** One `---`-separated `{ version, name, rules, cases }` document from a fixture file. */
+    record Suite(String version, String name, PolicyDefinition legacyDefinition, List<ComplianceFixtures.TestCase> cases) {}
 
     @SuppressWarnings("unchecked")
     static List<Suite> loadSuites(Path yamlFile) throws IOException {
         String content = Files.readString(yamlFile);
         List<Suite> suites = new ArrayList<>();
 
-        for (Object rawDoc : YAML.loadAll(content)) {
+        for (Object rawDoc : ComplianceFixtures.YAML.loadAll(content)) {
             Map<String, Object> raw = (Map<String, Object>) rawDoc;
+            String version = String.valueOf(raw.get("version"));
             String name = (String) raw.get("name");
 
             List<PolicyDefinition.Rule> allow = new ArrayList<>();
@@ -82,7 +74,7 @@ final class V1Fixtures {
             }
             PolicyDefinition legacyDefinition = new PolicyDefinition(1, name, null, allow, deny);
 
-            List<TestCase> cases = new ArrayList<>();
+            List<ComplianceFixtures.TestCase> cases = new ArrayList<>();
             for (Map<String, Object> rc : (List<Map<String, Object>>) raw.get("cases")) {
                 String action = (String) rc.get("action");
                 String subject = (String) rc.get("subject");
@@ -90,7 +82,7 @@ final class V1Fixtures {
                 String caseName = rc.get("name") != null
                     ? (String) rc.get("name")
                     : action + " / " + subject + " -> " + expected;
-                cases.add(new TestCase(
+                cases.add(new ComplianceFixtures.TestCase(
                     caseName,
                     action,
                     subject,
@@ -99,7 +91,7 @@ final class V1Fixtures {
                 ));
             }
 
-            suites.add(new Suite(name, legacyDefinition, cases));
+            suites.add(new Suite(version, name, legacyDefinition, cases));
         }
 
         return suites;

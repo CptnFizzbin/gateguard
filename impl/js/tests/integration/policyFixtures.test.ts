@@ -3,6 +3,7 @@ import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
 import { Policy, PolicyDefinition } from "../../src";
+import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
 
 /**
  * Metaprogrammed integration suite: every `*.yaml` fixture under
@@ -35,15 +36,14 @@ interface FixtureFile {
 }
 
 function discoverFixtures(): FixtureFile[] {
-  return fs
-    .readdirSync(FIXTURES_DIR)
-    .filter((f) => f.endsWith(".yaml") && !f.endsWith(".test.yaml"))
-    .sort()
-    .map((policyFile) => ({
+  return listYamlFiles(FIXTURES_DIR, (f) => !f.endsWith(".test.yaml")).map((policyPath) => {
+    const policyFile = path.basename(policyPath);
+    return {
       policyName: policyFile,
-      policyPath: path.join(FIXTURES_DIR, policyFile),
+      policyPath,
       testPath: path.join(FIXTURES_DIR, policyFile.replace(/\.yaml$/, ".test.yaml")),
-    }));
+    };
+  });
 }
 
 /** Parses a policy.yaml fixture's on-disk shape into a PolicyDefinition. */
@@ -108,10 +108,6 @@ describe.each(fixtures)("policy fixture: $policyName", ({ policyPath, testPath }
   const policy = Policy.from(loadPolicyDef(rawYaml));
 
   test.each(cases)("resolves test case: $name", (testCase) => {
-    const subjectArg = testCase.subjectData
-      ? { ...testCase.subjectData, __name: testCase.subject }
-      : testCase.subject;
-
-    expect(policy.can(testCase.action, subjectArg)).toBe(testCase.expected);
+    expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected);
   });
 });

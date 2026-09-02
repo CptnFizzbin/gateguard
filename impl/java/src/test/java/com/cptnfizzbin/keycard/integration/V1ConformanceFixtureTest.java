@@ -11,20 +11,24 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * Metaprogrammed: every case in every suite in every fixture file under
  * test/fixtures/v1 is discovered at test-run time (via {@link Parameterized})
  * and becomes its own case below. Dropping a new suite, or a new case into
  * an existing suite, adds coverage automatically - no new test code
- * required. See {@link V1Fixtures} for the fixture format and the adapter
- * this suite uses to run v1 fixtures against the current, pre-v1
- * implementation.
+ * required. See {@link V1Fixtures} and {@link ComplianceFixtures} for the
+ * fixture format and the adapter this suite uses to run v1 fixtures
+ * against the current, pre-v1 implementation.
+ *
+ * A suite whose declared `version` isn't covered by
+ * {@link ComplianceFixtures#MAX_VERSION_PROPERTY}, when that system
+ * property is set, is skipped (not failed) via {@link org.junit.Assume} -
+ * see ComplianceFixtures for that filtering knob.
  */
 @RunWith(Parameterized.class)
 public class V1ConformanceFixtureTest {
@@ -34,7 +38,7 @@ public class V1ConformanceFixtureTest {
         List<Object[]> params = new ArrayList<>();
         for (Path fixtureFile : V1Fixtures.discoverFixtureFiles()) {
             for (V1Fixtures.Suite suite : V1Fixtures.loadSuites(fixtureFile)) {
-                for (V1Fixtures.TestCase testCase : suite.cases()) {
+                for (ComplianceFixtures.TestCase testCase : suite.cases()) {
                     params.add(new Object[] {
                         fixtureFile.getFileName().toString(), suite.name(), testCase.name(), suite, testCase
                     });
@@ -45,10 +49,10 @@ public class V1ConformanceFixtureTest {
     }
 
     private final V1Fixtures.Suite suite;
-    private final V1Fixtures.TestCase testCase;
+    private final ComplianceFixtures.TestCase testCase;
 
     public V1ConformanceFixtureTest(
-        String fixtureName, String suiteName, String caseName, V1Fixtures.Suite suite, V1Fixtures.TestCase testCase
+        String fixtureName, String suiteName, String caseName, V1Fixtures.Suite suite, ComplianceFixtures.TestCase testCase
     ) {
         this.suite = suite;
         this.testCase = testCase;
@@ -56,17 +60,13 @@ public class V1ConformanceFixtureTest {
 
     @Test
     public void resolvesExpectedResult() {
+        assumeTrue(
+            "suite version " + suite.version() + " excluded by -D" + ComplianceFixtures.MAX_VERSION_PROPERTY,
+            ComplianceFixtures.isIncluded(suite.version())
+        );
+
         Policy policy = Policy.from(suite.legacyDefinition());
 
-        boolean actual;
-        if (testCase.subjectData() != null) {
-            Map<String, Object> subjectMap = new HashMap<>(testCase.subjectData());
-            subjectMap.put("__name", testCase.subject());
-            actual = policy.can(testCase.action(), subjectMap);
-        } else {
-            actual = policy.can(testCase.action(), testCase.subject());
-        }
-
-        assertEquals(testCase.name(), testCase.expected(), actual);
+        assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }
 }

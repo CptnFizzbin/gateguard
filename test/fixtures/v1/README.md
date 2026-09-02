@@ -21,6 +21,16 @@ the implementation work, not a bug in the fixtures. Once an implementation
 adopts the v1 schema natively, its adapter should be simplified to pass the
 parsed definition straight through instead of reshaping it.
 
+Discovery, subject-argument construction, and per-`version` filtering are
+factored into small, reusable utility modules shared by every compliance
+suite — not just this one — rather than duplicated per fixture format:
+`impl/js/tests/integration/complianceFixtures.ts` and
+`impl/java/.../integration/ComplianceFixtures.java`. Each format-specific
+loader (`policyFixtures.test.ts`/`v1ConformanceFixtures.test.ts` in JS,
+`PolicyFixtures`/`V1Fixtures` in Java) only owns parsing its own document
+shape into the shared `{ action, subject, subjectData?, expected }` case
+shape those utilities work with.
+
 ## Format
 
 Each `*.yaml` file is a sequence of one or more YAML documents (separated by
@@ -55,6 +65,25 @@ wrapped instance's value (a `SubjectRef`, per §5) and makes the check
 conditional-rule-eligible. Omitting `subjectData` checks a bare type (no
 instance — a `SubjectDef`/EC-9 style check): any rule carrying a `Conditions`
 element cannot match such a check (EC-7).
+
+## Filtering by version
+
+Every suite declares a SemVer `version`. Once fixtures for a newer `MINOR`
+version exist, a test run can cap which ones it exercises — useful for an
+implementation that only targets an older `MINOR` and shouldn't be expected
+to pass fixtures for a newer one it hasn't caught up to yet:
+
+- JS: set the `KEYCARD_FIXTURES_MAX_VERSION` env var, e.g.
+  `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`.
+- Java: set the `keycard.fixtures.maxVersion` system property, e.g.
+  `mvn test -Dkeycard.fixtures.maxVersion=1.0.0`.
+
+A suite whose `version` isn't covered (different `MAJOR`, or a higher
+`MINOR` than the cap) is skipped, not failed — mirroring the compatibility
+rule in SPEC_V1-0-0.md §2 (same `MAJOR`, `MINOR` no higher than what's
+supported; `PATCH` never matters). Leaving the knob unset runs every fixture
+regardless of the version it declares, which is the default today since
+every suite here declares `"1.0.0"`.
 
 ## Scope
 

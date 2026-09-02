@@ -1,7 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
-import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,7 +9,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Shared loading helpers for the fixture-driven integration tests. Not a
@@ -19,23 +17,18 @@ import java.util.stream.Collectors;
  * KeyCard itself never reads or writes policy.yaml text; parsing it into a
  * plain PolicyDefinition (via SnakeYaml, a test-only dependency) is this
  * test suite's job, mirroring what an application would do.
+ *
+ * File discovery, YAML parsing, and the per-case shape are shared with
+ * every other compliance suite via {@link ComplianceFixtures}.
  */
 final class PolicyFixtures {
     private PolicyFixtures() {}
 
     static final Path FIXTURES_DIR = Paths.get("../../test/fixtures/policies");
 
-    private static final Yaml YAML = new Yaml();
-
     /** All `policy-*.yaml` fixtures (excluding their `.test.yaml` companions), sorted by name. */
     static List<Path> discoverPolicyFiles() throws IOException {
-        try (var stream = Files.list(FIXTURES_DIR)) {
-            return stream
-                .filter(p -> p.getFileName().toString().endsWith(".yaml"))
-                .filter(p -> !p.getFileName().toString().endsWith(".test.yaml"))
-                .sorted()
-                .collect(Collectors.toList());
-        }
+        return ComplianceFixtures.discoverYamlFiles(FIXTURES_DIR, p -> !p.getFileName().toString().endsWith(".test.yaml"));
     }
 
     /** The `*.test.yaml` companion path for a given `*.yaml` policy fixture. */
@@ -48,7 +41,7 @@ final class PolicyFixtures {
     @SuppressWarnings("unchecked")
     static PolicyDefinition loadPolicyDefinition(Path yamlFile) throws IOException {
         String content = Files.readString(yamlFile);
-        Map<String, Object> raw = YAML.load(content);
+        Map<String, Object> raw = ComplianceFixtures.YAML.load(content);
 
         int version = raw.get("version") != null ? ((Number) raw.get("version")).intValue() : 1;
         String name = (String) raw.get("name");
@@ -73,18 +66,15 @@ final class PolicyFixtures {
         return rules;
     }
 
-    /** One entry from a `policy-*.test.yaml` companion's `tests:` list. */
-    record TestCase(String name, String action, String subject, Map<String, Object> subjectData, boolean expected) {}
-
     @SuppressWarnings("unchecked")
-    static List<TestCase> loadTestCases(Path testYamlFile) throws IOException {
+    static List<ComplianceFixtures.TestCase> loadTestCases(Path testYamlFile) throws IOException {
         String content = Files.readString(testYamlFile);
-        Map<String, Object> raw = YAML.load(content);
+        Map<String, Object> raw = ComplianceFixtures.YAML.load(content);
         List<Map<String, Object>> rawCases = (List<Map<String, Object>>) raw.get("tests");
 
-        List<TestCase> cases = new ArrayList<>();
+        List<ComplianceFixtures.TestCase> cases = new ArrayList<>();
         for (Map<String, Object> rc : rawCases) {
-            cases.add(new TestCase(
+            cases.add(new ComplianceFixtures.TestCase(
                 (String) rc.get("name"),
                 (String) rc.get("action"),
                 (String) rc.get("subject"),
