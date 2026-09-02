@@ -1,0 +1,170 @@
+version: "1.0.0"
+name: "bare-value shorthand (§7.2)"
+description: "{ status: archived } is shorthand for { status: { $eq: archived } }."
+rules:
+  - [allow, Read, Article, { status: published }]
+
+cases:
+  - name: "matching value is allowed"
+    subjectData: { status: published }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "non-matching value is denied"
+    subjectData: { status: draft }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "missing field is denied"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "missing field is not the same as explicit null (§7.3), via $ne"
+description: >
+  { status: { $ne: archived } } requires a status that is present and isn't
+  "archived" - a missing status is absence, not "not archived", and MUST be
+  false.
+rules:
+  - [allow, Read, Article, { status: { $ne: archived } }]
+
+cases:
+  - name: "present and different: allowed"
+    subjectData: { status: published }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "present and equal: denied"
+    subjectData: { status: archived }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "field missing entirely: denied, not allowed, despite not literally being archived"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "explicit null is a real value, and null !== archived, so this is allowed"
+    subjectData: { status: null }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "bare-value shorthand against an explicit null (§7.3)"
+rules:
+  - [allow, Read, Article, { status: null }]
+
+cases:
+  - name: "explicit null matches"
+    subjectData: { status: null }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "a missing key does not match null - null is not a wildcard"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "a non-null value does not match"
+    subjectData: { status: draft }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "nested field conditions (§7.4.10)"
+rules:
+  - [allow, Read, Article, { author: { name: "Alice" } }]
+
+cases:
+  - name: "nested match"
+    subjectData: { author: { name: "Alice" } }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "nested mismatch"
+    subjectData: { author: { name: "Bob" } }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "inner field missing"
+    subjectData: { author: {} }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "outer field missing"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$field: explicit field access for a $-prefixed field name (§7.4.11)"
+description: >
+  A subject field literally named "$type" can't be reached with the bare-key
+  form (`{ $type: ... }` would mean the $type operator), so this uses the
+  { $field: [name, Condition] } long form instead.
+rules:
+  - [allow, Read, Article, { $field: ["$type", { $eq: news }] }]
+
+cases:
+  - name: "matching value via $field"
+    subjectData: { "$type": news }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "non-matching value via $field"
+    subjectData: { "$type": blog }
+    action: Read
+    subject: Article
+    expected: deny
+
+  - name: "missing field via $field"
+    subjectData: {}
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$field with a malformed operand is a type issue, always false (§7.4.11)"
+rules:
+  - [allow, Read, Article, { $field: "not-a-tuple" }]
+
+cases:
+  - name: "malformed $field operand never matches"
+    subjectData: { name: "x" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$field with the wrong tuple length is a type issue, always false (§7.4.11)"
+rules:
+  - [allow, Read, Article, { $field: ["name"] }]
+
+cases:
+  - name: "malformed $field operand (missing Condition element) never matches"
+    subjectData: { name: "x" }
+    action: Read
+    subject: Article
+    expected: deny
