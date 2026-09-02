@@ -14,32 +14,29 @@ public final class ConditionResolver {
 
     private static final String DIAGNOSTIC_PREFIX = "[KeyCard]";
 
-    /** A built-in operator's implementation - takes the resolving instance (for recursive evaluate() calls and diagnostics) plus the subject/operand. */
-    @FunctionalInterface
-    private interface BuiltinOperator {
-        boolean check(ConditionResolver resolver, Object subject, Object value);
-    }
-
     /**
      * Every operator this resolver understands natively (§7.4.1-§7.4.11),
      * keyed by its `$`-prefixed name - the single source of truth for both
      * dispatch and "is this name built-in" (no separately-maintained name
-     * list to fall out of sync with it).
+     * list to fall out of sync with it). Assembled from the named {@link
+     * DefaultOperators} constants via {@link OperatorMap#of}, rather than
+     * an ad hoc Map.ofEntries(...) that duplicates each name as both a map
+     * key and a lambda's identity.
      */
-    private static final Map<String, BuiltinOperator> BUILTIN_OPERATOR_IMPLS = Map.ofEntries(
-        Map.entry("$eq", (r, s, v) -> StringConditions.eq(s, v)),
-        Map.entry("$ne", (r, s, v) -> StringConditions.ne(s, v)),
-        Map.entry("$gt", (r, s, v) -> r.numericCompare("$gt", s, v, (a, b) -> a > b)),
-        Map.entry("$gte", (r, s, v) -> r.numericCompare("$gte", s, v, (a, b) -> a >= b)),
-        Map.entry("$lt", (r, s, v) -> r.numericCompare("$lt", s, v, (a, b) -> a < b)),
-        Map.entry("$lte", (r, s, v) -> r.numericCompare("$lte", s, v, (a, b) -> a <= b)),
-        Map.entry("$in", (r, s, v) -> r.inCheck(s, v)),
-        Map.entry("$has", (r, s, v) -> r.hasCheck(s, v)),
-        Map.entry("$substr", (r, s, v) -> r.substrCheck(s, v)),
-        Map.entry("$or", (r, s, v) -> r.orCheck(s, v)),
-        Map.entry("$and", (r, s, v) -> r.andCheck(s, v)),
-        Map.entry("$not", (r, s, v) -> !r.evaluate(s, v)),
-        Map.entry("$field", (r, s, v) -> r.fieldOpCheck(s, v))
+    private static final Map<String, Operator.Impl> BUILTIN_OPERATOR_IMPLS = OperatorMap.of(
+        DefaultOperators.EQ,
+        DefaultOperators.NE,
+        DefaultOperators.GT,
+        DefaultOperators.GTE,
+        DefaultOperators.LT,
+        DefaultOperators.LTE,
+        DefaultOperators.IN,
+        DefaultOperators.HAS,
+        DefaultOperators.SUBSTR,
+        DefaultOperators.OR,
+        DefaultOperators.AND,
+        DefaultOperators.NOT,
+        DefaultOperators.FIELD
     );
 
     /** Every `$`-prefixed key this resolver understands natively - anything else starting with "$" is a custom operator lookup (§7.4.12). */
@@ -102,7 +99,7 @@ public final class ConditionResolver {
             return fieldCheck(subject, key, value);
         }
 
-        BuiltinOperator builtin = BUILTIN_OPERATOR_IMPLS.get(key);
+        Operator.Impl builtin = BUILTIN_OPERATOR_IMPLS.get(key);
         if (builtin != null) {
             return builtin.check(this, subject, value);
         }
@@ -110,8 +107,8 @@ public final class ConditionResolver {
         return customOperatorCheck(subject, key, value);
     }
 
-    /** §7.4.3: $gt/$gte/$lt/$lte - numeric-only, IEEE-754 double semantics. */
-    private boolean numericCompare(String op, Object subject, Object operand, BiPredicate<Double, Double> cmp) {
+    /** §7.4.3: $gt/$gte/$lt/$lte - numeric-only, IEEE-754 double semantics. Package-private: called from {@link DefaultOperators}'s implementations too. */
+    boolean numericCompare(String op, Object subject, Object operand, BiPredicate<Double, Double> cmp) {
         if (!(subject instanceof Number) || !(operand instanceof Number)) {
             logTypeIssue(op, "expected the subject and operand to both be numbers, got "
                 + typeName(subject) + " and " + typeName(operand));
@@ -122,8 +119,8 @@ public final class ConditionResolver {
         return cmp.test(a, b);
     }
 
-    /** §7.4.4: $in - operand must be a collection; containment uses $eq semantics per element. */
-    private boolean inCheck(Object subject, Object operand) {
+    /** §7.4.4: $in - operand must be a collection; containment uses $eq semantics per element. Package-private: called from {@link DefaultOperators}. */
+    boolean inCheck(Object subject, Object operand) {
         if (!(operand instanceof List)) {
             logTypeIssue("$in", "expected an array operand, got " + typeName(operand));
             return false;
@@ -131,8 +128,8 @@ public final class ConditionResolver {
         return GroupConditions.in(subject, (List<?>) operand);
     }
 
-    /** §7.4.5: $has - subject must be a collection. */
-    private boolean hasCheck(Object subject, Object value) {
+    /** §7.4.5: $has - subject must be a collection. Package-private: called from {@link DefaultOperators}. */
+    boolean hasCheck(Object subject, Object value) {
         if (!(subject instanceof List)) {
             logTypeIssue("$has", "expected an array subject, got " + typeName(subject));
             return false;
@@ -140,8 +137,8 @@ public final class ConditionResolver {
         return GroupConditions.has((List<?>) subject, value);
     }
 
-    /** §7.4.6: $substr - a null subject is an ordinary non-match, not a type issue; an invalid pattern always is. */
-    private boolean substrCheck(Object subject, Object pattern) {
+    /** §7.4.6: $substr - a null subject is an ordinary non-match, not a type issue; an invalid pattern always is. Package-private: called from {@link DefaultOperators}. */
+    boolean substrCheck(Object subject, Object pattern) {
         if (!(pattern instanceof String)) {
             logTypeIssue("$substr", "expected a string pattern, got " + typeName(pattern));
             return false;
@@ -157,8 +154,8 @@ public final class ConditionResolver {
         return parsed.matches(String.valueOf(subject));
     }
 
-    /** §7.4.7: $or - operand must be an array; {@code $or: []} is vacuously false. */
-    private boolean orCheck(Object subject, Object operand) {
+    /** §7.4.7: $or - operand must be an array; {@code $or: []} is vacuously false. Package-private: called from {@link DefaultOperators}. */
+    boolean orCheck(Object subject, Object operand) {
         if (!(operand instanceof List)) {
             logTypeIssue("$or", "expected an array operand, got " + typeName(operand));
             return false;
@@ -171,8 +168,8 @@ public final class ConditionResolver {
         return LogicConditions.or(this, subject, list);
     }
 
-    /** §7.4.8: $and - operand must be an array; {@code $and: []} is vacuously true. */
-    private boolean andCheck(Object subject, Object operand) {
+    /** §7.4.8: $and - operand must be an array; {@code $and: []} is vacuously true. Package-private: called from {@link DefaultOperators}. */
+    boolean andCheck(Object subject, Object operand) {
         if (!(operand instanceof List)) {
             logTypeIssue("$and", "expected an array operand, got " + typeName(operand));
             return false;
@@ -185,8 +182,8 @@ public final class ConditionResolver {
         return LogicConditions.and(this, subject, list);
     }
 
-    /** §7.4.11: $field - explicit field access, for a field whose name itself starts with "$". */
-    private boolean fieldOpCheck(Object subject, Object operand) {
+    /** §7.4.11: $field - explicit field access, for a field whose name itself starts with "$". Package-private: called from {@link DefaultOperators}. */
+    boolean fieldOpCheck(Object subject, Object operand) {
         if (!(operand instanceof List) || ((List<?>) operand).size() != 2 || !(((List<?>) operand).get(0) instanceof String)) {
             logTypeIssue("$field", "expected a [name, Condition] tuple, got " + operand);
             return false;
