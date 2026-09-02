@@ -133,10 +133,10 @@ implementations **MUST** throw a `PolicyLoadException` if some rule's action
 isn't `meta.anyAction` and isn't listed in `meta.actions`
 (symmetrically for subjects/`meta.subjects`). See EC-8.
 
-The wildcard token **SHOULD NOT** be excluded from the catalog, though doing
-so remains valid — it **MUST** always be recognized regardless of whether
-it's listed; including it simply documents to a reader that this policy
-relies on the wildcard.
+The wildcard token **SHOULD** be excluded from the catalog — it **MUST**
+always be recognized regardless of whether it's listed, so enumerating it
+alongside literal names adds nothing; `meta.actions`/`meta.subjects` are for
+the concrete vocabulary a policy uses, not the wildcard mechanism itself.
 
 A name listed in the catalog that no rule actually uses **MUST NOT**
 be treated as an issue. These catalogs describe the vocabulary a policy is
