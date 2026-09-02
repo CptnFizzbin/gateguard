@@ -1,17 +1,15 @@
-version: 1
+version: "1.0.0"
 name: "Status-Based Policy"
 description: "Complex conditions based on article status"
 
-allow:
-  - [Read, Article]
-  - [Create, Article]
-  - [Update, Article, {
+rules:
+  - [allow, Read, Article]
+  - [allow, Create, Article]
+  - [allow, Update, Article, {
       $and: [
         { owner_id: 1 },
         { status: { $ne: archived } }
       ]
     }]
-  - [Delete, Article, { status: { $ne: archived } }]
-
-deny:
-  - [Delete, Article, { status: archived }]
+  - [allow, Delete, Article, { status: { $ne: archived } }]
+  - [deny, Delete, Article, { status: archived }]

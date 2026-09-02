@@ -83,10 +83,11 @@ See [TYPE_SAFETY.md](../TYPE_SAFETY.md) for detailed examples.
 - `$lte` - Less than or equal
 - `$in` - Value in array
 - `$has` - Array contains value
-- `$rgx` - Regex match
+- `$substr` - Substring pattern match (a small, non-regex pattern language - see SPEC_V1-0-0.md §7.4.6)
 - `$or` - Logical OR
 - `$and` - Logical AND
 - `$not` - Logical NOT
+- `$field` - Explicit field access, for a field whose name itself starts with "$"
 - Field conditions - Check nested properties
 
 ## API
@@ -121,7 +122,6 @@ and `Policy` expect from an actions or subjects map, e.g.
 - `can(action, subject)` - Check if action is allowed
 - `cannot(action, subject)` - Check if action is denied
 - `require(action, subject)` - Throw if not allowed
-- `append(definition)` - Merge additional policies
 - `def()` - Get underlying definition
 
 ## Examples

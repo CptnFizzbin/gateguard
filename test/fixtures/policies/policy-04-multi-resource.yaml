@@ -1,18 +1,16 @@
-version: 1
+version: "1.0.0"
 name: "Multi-Resource Policy"
 description: "Different permissions for articles, comments, and users"
 
-allow:
-  - [Read, Article]
-  - [Create, Article]
-  - [Update, Article, { owner_id: 1 }]
-  - [Delete, Article, { owner_id: 1 }]
-  - [Read, Comment]
-  - [Create, Comment]
-  - [Update, Comment, { author_id: 1 }]
-  - [Delete, Comment, { author_id: 1 }]
-  - [Read, User]
-  - [Update, User, { id: 1 }]
-
-deny:
-  - [Delete, User]
+rules:
+  - [allow, Read, Article]
+  - [allow, Create, Article]
+  - [allow, Update, Article, { owner_id: 1 }]
+  - [allow, Delete, Article, { owner_id: 1 }]
+  - [allow, Read, Comment]
+  - [allow, Create, Comment]
+  - [allow, Update, Comment, { author_id: 1 }]
+  - [allow, Delete, Comment, { author_id: 1 }]
+  - [allow, Read, User]
+  - [allow, Update, User, { id: 1 }]
+  - [deny, Delete, User]

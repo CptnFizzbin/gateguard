@@ -1,11 +1,16 @@
-version: 1
+version: "1.0.0"
 name: "Advanced Admin Policy"
 description: "Complex nested conditions with logic operators"
 
-allow:
-  - [Read, Article]
-  - [Create, Article]
-  - [Update, Article, {
+meta:
+  # $startsWithUpper is a custom operator this test suite registers a
+  # checker for - it isn't a built-in, per SPEC_V1-0-0.md §7.4.12.
+  customOperators: [$startsWithUpper]
+
+rules:
+  - [allow, Read, Article]
+  - [allow, Create, Article]
+  - [allow, Update, Article, {
       $or: [
         {
           $and: [
@@ -16,7 +21,7 @@ allow:
         { role: admin }
       ]
     }]
-  - [Delete, Article, {
+  - [allow, Delete, Article, {
       $and: [
         {
           $or: [
@@ -24,20 +29,18 @@ allow:
             { role: admin }
           ]
         },
-        { status: { $not: archived } },
+        { status: { $ne: archived } },
         { view_count: { $lt: 100 } }
       ]
     }]
-  - [Publish, Article, {
+  - [allow, Publish, Article, {
       $and: [
         { owner_id: 1 },
         { status: draft },
-        { title: { $rgx: "^[A-Z].*" } }
+        { title: { $startsWithUpper: true } }
       ]
     }]
-
-deny:
-  - [Delete, Article, {
+  - [deny, Delete, Article, {
       $and: [
         { view_count: { $gte: 1000 } },
         { status: published }

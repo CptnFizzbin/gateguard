@@ -11,11 +11,11 @@ export type { Condition, CustomConditionChecker } from "./conditions";
 export { ConditionResolver } from "./conditions";
 
 // Policy
-export type { Rule, PolicyDefinition } from "./policy";
+export type { Rule, RuleTuple, Meta, Effect, PolicyDefinition } from "./policy";
 export { Policy } from "./policy";
 
 // PolicyBuilder
 export { PolicyBuilder } from "./builder";
 
 // Errors
-export { PolicyError } from "./errors";
+export { PolicyError, PolicyLoadException, PolicyVersionException, PolicyArgumentError } from "./errors";
