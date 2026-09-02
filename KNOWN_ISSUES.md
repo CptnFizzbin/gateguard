@@ -7,46 +7,10 @@ it is not part of the spec itself, and fixing an implementation should
 shrink this list, not the spec document. Section references below (§N)
 point into `SPEC_V1-0-0.md`.
 
-## Status
+`impl/java` is now fully compliant with this revision. Everything below is
+`impl/js`-only, until it's migrated in a companion PR (#12).
 
-`impl/java` now implements the v1 `rules`/`meta` `PolicyDefinition` schema
-natively — `version` is a SemVer string, `rules` is a single ordered list
-of `[effect, action, subject, conditions?]` tuples evaluated via
-reverse-scan last-rule-wins, and `meta.anyAction`/`meta.anySubject`/
-`meta.actions`/`meta.subjects`/`meta.customOperators`/`meta.application`
-are all supported per §3. `test/fixtures/v1/` is read directly (no
-adapter) by `V1ConformanceFixtureTest`, and every case there passes.
-`test/fixtures/policies/*.yaml` has been migrated to the v1 schema as
-well (shared with `impl/js`'s equivalent suite).
-
-`impl/js` has not been migrated to this revision yet — see the "JS gaps"
-section below, which is what the pre-existing (pre-v1) document used to
-track for both implementations, now scoped to JS only.
-
-## One spec-wording note (not an implementation gap)
-
-§3.2.3 ends with "During construction, implementations MUST throw a
-PolicyLoadException if a behavior is not provided to the constructor,"
-which read literally would mean *any* cataloged-but-unregistered custom
-operator throws at `Policy.from(...)` time. That directly contradicts
-EC-15, which requires the opposite — a cataloged-but-never-registered
-operator MUST NOT throw; it resolves to `false` with a §7.1 console
-diagnostic logged only when evaluation actually reaches it. EC-15 is also
-the behavior `test/fixtures/v1/09-custom-operators.yaml`'s "a cataloged
-but never-registered custom operator still evaluates false" case
-requires (`expected: deny`, not a construction-time error). `impl/java`
-(`Policy.java`) follows EC-15 and the conformance suite here, and does
-not throw for this case — treat §3.2.3's closing sentence as an error in
-the spec prose rather than normative behavior to implement. (`impl/js`
-should follow the same interpretation once it adopts
-`meta.customOperators`.)
-
-## JS gaps
-
-None of the following exist in `impl/js` yet — they mirror what used to
-be tracked for both implementations before `impl/java` closed them:
-
-### Schema
+## Schema
 
 - **`rules.allow`/`rules.deny` → a single ordered `rules` list, plus a new
   `meta` object** (§2). `impl/js/src/policy/PolicyDefinition.ts`'s
@@ -69,7 +33,7 @@ be tracked for both implementations before `impl/java` closed them:
   a pre-v1 extension outside the spec) as part of adopting this revision,
   since the spec no longer defines its semantics.
 
-### Algorithm
+## Algorithm
 
 - **"allow AND NOT deny" → reverse-scan last-match-wins** (§6).
   `impl/js/src/policy/Policy.ts`'s `checkPermission`/`matchesAnyRule`
@@ -95,7 +59,7 @@ be tracked for both implementations before `impl/java` closed them:
   just silently return `false`. Needs a console call added at each of the
   type-issue sites listed in §7.4.
 
-### Construction-time validation (new in this revision)
+## Construction-time validation (new in this revision)
 
 None of the following exist yet — all are new `Policy.from(...)`/
 `PolicyBuilder` requirements introduced by this revision, not existing
@@ -112,7 +76,7 @@ behavior that's merely wrong:
 - **A wildcard rule carrying a condition **MUST** throw** — see "No
   enforcement that a wildcard rule is unconditional" above.
 
-### `meta.customOperators` and custom-operator registration
+## `meta.customOperators` and custom-operator registration
 
 - **`meta.customOperators` doesn't exist yet, and neither does the
   registered-vs-cataloged coverage check it implies** (§7.4.12, EC-13,
@@ -126,7 +90,7 @@ behavior that's merely wrong:
   `Map<String, CustomConditionChecker>` mechanism, passed to `Policy.from`,
   is a model for this - JS already has an equivalent shape to extend.)
 
-### Condition operators
+## Condition operators
 
 - **`$rgx` needs to be replaced with `$substr`** (§7.4.6). v1 drops regex
   matching entirely in favor of a small, non-regex pattern language
@@ -154,7 +118,7 @@ behavior that's merely wrong:
   already does) rather than returning from inside a chain of single-key
   `if` checks.
 
-### Fixtures
+## Fixtures
 
 - **`test/fixtures/v1/` is a spec-native conformance suite (see the
   README there) that `impl/js` reads through a best-effort adapter that

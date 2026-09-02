@@ -61,10 +61,7 @@ public final class PolicyBuilder {
             boolean actionIsWildcard = anyAction != null && action.getName().equals(anyAction);
             boolean subjectIsWildcard = anySubject != null && subject.getName().equals(anySubject);
             if (actionIsWildcard && subjectIsWildcard) {
-                throw new PolicyArgumentException(
-                    "A rule wildcarded on both the action (\"" + anyAction + "\") and the subject (\"" + anySubject
-                        + "\") MUST NOT carry a Conditions element (SPEC_V1-0-0.md §6 property 5, EC-6)."
-                );
+                throw new PolicyArgumentException("rules with any action and any subject cannot be conditional");
             }
         }
 

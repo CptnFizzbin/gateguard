@@ -27,4 +27,15 @@ public record SemVer(int major, int minor, int patch) {
         }
         return Integer.parseInt(component);
     }
+
+    /**
+     * True when a document declaring `this` version is compatible with an
+     * implementation supporting `supported` - SPEC_V1-0-0.md §2: the same
+     * MAJOR, and a MINOR no higher than what's supported (i.e. `supported`
+     * MUST be at or above `this`, within the same MAJOR). PATCH never
+     * affects compatibility.
+     */
+    public boolean isCompatibleWith(SemVer supported) {
+        return major == supported.major && minor <= supported.minor;
+    }
 }

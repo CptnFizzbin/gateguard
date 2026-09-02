@@ -15,9 +15,8 @@ import java.util.Map;
 import java.util.Set;
 
 public final class Policy {
-    /** The highest MAJOR.MINOR this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
-    private static final int SUPPORTED_MAJOR = 1;
-    private static final int SUPPORTED_MINOR = 0;
+    /** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
+    private static final SemVer SUPPORTED_VERSION = SemVer.parse("1.0.0");
 
     private final PolicyDefinition definition;
     private final ConditionResolver resolver;
@@ -196,11 +195,10 @@ public final class Policy {
         } catch (RuntimeException e) {
             throw new PolicyVersionException("Invalid policy version \"" + version + "\": " + e.getMessage());
         }
-        if (parsed.major() != SUPPORTED_MAJOR || parsed.minor() > SUPPORTED_MINOR) {
+        if (!parsed.isCompatibleWith(SUPPORTED_VERSION)) {
             throw new PolicyVersionException(
-                "Unsupported policy version \"" + version + "\": this implementation supports "
-                    + SUPPORTED_MAJOR + ".0.0 through " + SUPPORTED_MAJOR + "." + SUPPORTED_MINOR
-                    + ".x (SPEC_V1-0-0.md §2)."
+                "Unsupported policy version \"" + version + "\": this implementation supports up to "
+                    + SUPPORTED_VERSION.major() + "." + SUPPORTED_VERSION.minor() + ".x (SPEC_V1-0-0.md §2)."
             );
         }
     }

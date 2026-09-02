@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
+import java.util.regex.Pattern;
 
 /**
  * Implements SPEC_V1-0-0.md §7: the condition language and its
@@ -17,11 +18,36 @@ public final class ConditionResolver {
 
     private static final String DIAGNOSTIC_PREFIX = "[KeyCard]";
 
-    /** Every {@code $}-prefixed key this resolver understands natively - anything else starting with "$" is a custom operator lookup (§7.4.12). */
-    public static final Set<String> BUILTIN_OPERATORS = Set.of(
-        "$eq", "$ne", "$gt", "$gte", "$lt", "$lte",
-        "$in", "$has", "$substr", "$or", "$and", "$not", "$field"
+    /** A built-in operator's implementation - takes the resolving instance (for recursive evaluate() calls and diagnostics) plus the subject/operand. */
+    @FunctionalInterface
+    private interface BuiltinOperator {
+        boolean check(ConditionResolver resolver, Object subject, Object value);
+    }
+
+    /**
+     * Every operator this resolver understands natively (§7.4.1-§7.4.11),
+     * keyed by its `$`-prefixed name - the single source of truth for both
+     * dispatch and "is this name built-in" (no separately-maintained name
+     * list to fall out of sync with it).
+     */
+    private static final Map<String, BuiltinOperator> BUILTIN_OPERATOR_IMPLS = Map.ofEntries(
+        Map.entry("$eq", (r, s, v) -> StringConditions.eq(s, v)),
+        Map.entry("$ne", (r, s, v) -> StringConditions.ne(s, v)),
+        Map.entry("$gt", (r, s, v) -> r.numericCompare("$gt", s, v, (a, b) -> a > b)),
+        Map.entry("$gte", (r, s, v) -> r.numericCompare("$gte", s, v, (a, b) -> a >= b)),
+        Map.entry("$lt", (r, s, v) -> r.numericCompare("$lt", s, v, (a, b) -> a < b)),
+        Map.entry("$lte", (r, s, v) -> r.numericCompare("$lte", s, v, (a, b) -> a <= b)),
+        Map.entry("$in", (r, s, v) -> r.inCheck(s, v)),
+        Map.entry("$has", (r, s, v) -> r.hasCheck(s, v)),
+        Map.entry("$substr", (r, s, v) -> r.substrCheck(s, v)),
+        Map.entry("$or", (r, s, v) -> r.orCheck(s, v)),
+        Map.entry("$and", (r, s, v) -> r.andCheck(s, v)),
+        Map.entry("$not", (r, s, v) -> !r.evaluate(s, v)),
+        Map.entry("$field", (r, s, v) -> r.fieldOpCheck(s, v))
     );
+
+    /** Every `$`-prefixed key this resolver understands natively - anything else starting with "$" is a custom operator lookup (§7.4.12). */
+    public static final Set<String> BUILTIN_OPERATORS = BUILTIN_OPERATOR_IMPLS.keySet();
 
     private final Map<String, CustomConditionChecker> customCheckers;
     private final Set<String> declaredCustomOperators;
@@ -70,42 +96,22 @@ public final class ConditionResolver {
         return true;
     }
 
+    /**
+     * §7.4.12, §7.5: any key starting with "$" is an operator lookup, never
+     * a field name - built-in and custom operators are both resolved the
+     * same way, by name, against their respective registries.
+     */
     private boolean evaluateKey(Object subject, String key, Object value) {
-        switch (key) {
-            case "$eq":
-                return StringConditions.eq(subject, value);
-            case "$ne":
-                return StringConditions.ne(subject, value);
-            case "$gt":
-                return numericCompare("$gt", subject, value, (a, b) -> a > b);
-            case "$gte":
-                return numericCompare("$gte", subject, value, (a, b) -> a >= b);
-            case "$lt":
-                return numericCompare("$lt", subject, value, (a, b) -> a < b);
-            case "$lte":
-                return numericCompare("$lte", subject, value, (a, b) -> a <= b);
-            case "$in":
-                return inCheck(subject, value);
-            case "$has":
-                return hasCheck(subject, value);
-            case "$substr":
-                return substrCheck(subject, value);
-            case "$or":
-                return orCheck(subject, value);
-            case "$and":
-                return andCheck(subject, value);
-            case "$not":
-                return LogicConditions.not(this, subject, value);
-            case "$field":
-                return fieldOpCheck(subject, value);
-            default:
-                // §7.5: any key starting with "$" MUST be treated as an
-                // operator, never a field name, whether or not it's recognized.
-                if (key.startsWith("$")) {
-                    return customOperatorCheck(subject, key, value);
-                }
-                return fieldCheck(subject, key, value);
+        if (!key.startsWith("$")) {
+            return fieldCheck(subject, key, value);
         }
+
+        BuiltinOperator builtin = BUILTIN_OPERATOR_IMPLS.get(key);
+        if (builtin != null) {
+            return builtin.check(this, subject, value);
+        }
+
+        return customOperatorCheck(subject, key, value);
     }
 
     /** §7.4.3: $gt/$gte/$lt/$lte - numeric-only, IEEE-754 double semantics. */
@@ -213,7 +219,21 @@ public final class ConditionResolver {
         }
     }
 
-    /** §7.4.12: a custom $op - delegates to a registered checker, or evaluates false (EC-13/EC-15). */
+    /**
+     * §7.4.12: a custom $op - delegates to a registered checker, or
+     * evaluates false (EC-13/EC-15).
+     *
+     * Note on §3.2.3 vs. EC-15: §3.2.3's closing sentence ("implementations
+     * MUST throw a PolicyLoadException if a behavior is not provided to the
+     * constructor") read literally would mean any cataloged-but-unregistered
+     * operator throws at construction time - but EC-15 explicitly requires
+     * the opposite (resolves to false, with a diagnostic, and MUST NOT
+     * throw), and that's also what
+     * test/fixtures/v1/09-custom-operators.yaml's "cataloged but
+     * never-registered" case expects. This method follows EC-15 and the
+     * conformance suite; treat §3.2.3's closing sentence as an error in the
+     * spec prose rather than normative behavior to implement.
+     */
     private boolean customOperatorCheck(Object subject, String op, Object value) {
         CustomConditionChecker checker = customCheckers.get(op);
         if (checker != null) {
@@ -246,21 +266,20 @@ public final class ConditionResolver {
     }
 
     /**
-     * §7.4.6: a small, non-regex substring pattern language. Parses into
-     * anchors plus the literal segments between its wildcards; {@link
-     * #parse} returns {@code null} for a structurally invalid pattern (an
-     * unescaped "^" anywhere but the first character, or an unescaped "$"
-     * anywhere but the last).
+     * §7.4.6: a small, non-regex substring pattern language, implemented by
+     * compiling it to a Java regex - the spec explicitly permits this
+     * ("Implementations MAY implement $substr however they like internally
+     * (including compiling it to the host language's native regex engine,
+     * e.g. translating `*`/`**` to `.+` and escaping literal segments)").
+     * {@link #parse} returns {@code null} for a structurally invalid
+     * pattern (an unescaped "^" anywhere but the first character, or an
+     * unescaped "$" anywhere but the last).
      */
     private static final class SubstrPattern {
-        private final boolean anchorStart;
-        private final boolean anchorEnd;
-        private final List<String> segments;
+        private final Pattern compiled;
 
-        private SubstrPattern(boolean anchorStart, boolean anchorEnd, List<String> segments) {
-            this.anchorStart = anchorStart;
-            this.anchorEnd = anchorEnd;
-            this.segments = segments;
+        private SubstrPattern(Pattern compiled) {
+            this.compiled = compiled;
         }
 
         static SubstrPattern parse(String raw) {
@@ -321,47 +340,24 @@ public final class ConditionResolver {
             }
 
             segments.add(current.toString());
-            return new SubstrPattern(anchorStart, anchorEnd, segments);
+
+            // Translate to a regex: each literal segment quoted verbatim, a
+            // wildcard becomes ".+" (one-or-more, DOTALL so it's truly "any
+            // character"), and the leading/trailing anchors carry straight
+            // through as regex anchors.
+            StringBuilder regex = new StringBuilder();
+            if (anchorStart) regex.append('^');
+            for (int idx = 0; idx < segments.size(); idx++) {
+                if (idx > 0) regex.append(".+");
+                regex.append(Pattern.quote(segments.get(idx)));
+            }
+            if (anchorEnd) regex.append('$');
+
+            return new SubstrPattern(Pattern.compile(regex.toString(), Pattern.DOTALL));
         }
 
         boolean matches(String subject) {
-            int n = subject.length();
-            int lastIdx = segments.size() - 1;
-            int cursor = 0;
-
-            for (int idx = 0; idx <= lastIdx; idx++) {
-                String seg = segments.get(idx);
-                boolean isFirst = idx == 0;
-                boolean isLast = idx == lastIdx;
-                int minStart = isFirst ? 0 : cursor + 1; // a wildcard requires 1+ characters between segments
-                boolean anchoredStart = isFirst && anchorStart;
-                boolean anchoredEnd = isLast && anchorEnd;
-
-                if (anchoredStart && anchoredEnd) {
-                    if (subject.length() != seg.length() || !subject.equals(seg)) return false;
-                    cursor = n;
-                    continue;
-                }
-
-                if (anchoredStart) {
-                    if (!subject.startsWith(seg)) return false;
-                    cursor = seg.length();
-                    continue;
-                }
-
-                if (anchoredEnd) {
-                    int start = n - seg.length();
-                    if (start < minStart || !subject.substring(start).equals(seg)) return false;
-                    cursor = n;
-                    continue;
-                }
-
-                int found = subject.indexOf(seg, minStart);
-                if (found == -1) return false;
-                cursor = found + seg.length();
-            }
-
-            return true;
+            return compiled.matcher(subject).find();
         }
     }
 }
