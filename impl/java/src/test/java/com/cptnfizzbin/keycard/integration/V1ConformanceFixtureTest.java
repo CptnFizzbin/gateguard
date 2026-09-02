@@ -22,8 +22,7 @@ import static org.junit.Assume.assumeTrue;
  * and becomes its own case below. Dropping a new suite, or a new case into
  * an existing suite, adds coverage automatically - no new test code
  * required. See {@link V1Fixtures} and {@link ComplianceFixtures} for the
- * fixture format and the adapter this suite uses to run v1 fixtures
- * against the current, pre-v1 implementation.
+ * fixture format this suite parses each case from.
  *
  * A fixture whose declared `version` isn't covered by
  * {@link #COMPLIANT_VERSION} - this suite's own baked-in ceiling, per
@@ -36,12 +35,13 @@ import static org.junit.Assume.assumeTrue;
 public class V1ConformanceFixtureTest {
 
     /**
-     * The highest v1 SemVer this suite's adapter (see {@link V1Fixtures})
-     * is written against. Baked into the suite itself - rather than left to
-     * whatever an external default happens to be - so "which version this
-     * runs compliant with" is a property of the code: bump it only once the
-     * adapter has actually been updated to handle whatever a newer MINOR
-     * version's fixtures add, not merely because such fixtures exist.
+     * The highest v1 SemVer this suite (and the {@code Policy}
+     * implementation it exercises) is written against. Baked into the
+     * suite itself - rather than left to whatever an external default
+     * happens to be - so "which version this runs compliant with" is a
+     * property of the code: bump it only once the implementation has
+     * actually been updated to handle whatever a newer MINOR version's
+     * fixtures add, not merely because such fixtures exist.
      */
     private static final String COMPLIANT_VERSION = "1.0.0";
 
@@ -77,7 +77,7 @@ public class V1ConformanceFixtureTest {
             ComplianceFixtures.isIncluded(suite.version(), COMPLIANT_VERSION)
         );
 
-        Policy policy = Policy.from(suite.legacyDefinition());
+        Policy policy = Policy.from(suite.definition());
 
         assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }

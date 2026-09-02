@@ -108,10 +108,11 @@ policy.can(create, "Article");      // ✗ Compiler error
 - `$lte` - Less than or equal
 - `$in` - Value in collection
 - `$has` - Collection contains value
-- `$rgx` - Regex match
+- `$substr` - Substring pattern match (a small, non-regex pattern language - see SPEC_V1-0-0.md §7.4.6)
 - `$or` - Logical OR
 - `$and` - Logical AND
 - `$not` - Logical NOT
+- `$field` - Explicit field access, for a field whose name itself starts with "$"
 - Field conditions - Check nested properties
 
 ## API
@@ -160,7 +161,6 @@ Check permissions:
 - `can(action, subjectRef)` - Check by reference
 - `cannot(action, subject)` - Check negation
 - `require(action, subject)` - Require permission (throws on denial)
-- `append(definition)` - Merge policies
 - `getDefinition()` - Get underlying definition
 
 ### ConditionResolver
@@ -170,10 +170,10 @@ Evaluates conditions:
 
 ### PolicyDefinition
 
-Serializable policy:
-- `getVersion()` - Get spec version
-- `getAllowRules()` - Get allow rules
-- `getDenyRules()` - Get deny rules
+Serializable policy, per SPEC_V1-0-0.md §3:
+- `getVersion()` - Get the SemVer spec version, e.g. `"1.0.0"`
+- `getMeta()` - Get the optional `meta` object (wildcard tokens, catalogs, application data)
+- `getRules()` - Get the ordered list of `[effect, action, subject, conditions?]` rules
 
 ### PolicyException
 

@@ -36,9 +36,11 @@ public class PolicyFixtureReadTest {
         return params;
     }
 
+    private final String policyName;
     private final Path policyPath;
 
-    public PolicyFixtureReadTest(String fixtureName, Path policyPath) {
+    public PolicyFixtureReadTest(String policyName, Path policyPath) {
+        this.policyName = policyName;
         this.policyPath = policyPath;
     }
 
@@ -46,15 +48,14 @@ public class PolicyFixtureReadTest {
     public void successfullyReadsThePolicyYamlFile() throws IOException {
         PolicyDefinition def = PolicyFixtures.loadPolicyDefinition(policyPath);
 
-        assertTrue("version should be a positive integer", def.getVersion() > 0);
-        assertNotNull("allow rules should parse to a list", def.getAllowRules());
-        assertNotNull("deny rules should parse to a list", def.getDenyRules());
+        assertNotNull("version should parse to a non-null SemVer string", def.getVersion());
+        assertNotNull("rules should parse to a list", def.getRules());
     }
 
     @Test
     public void policyFromDefinitionToDefinitionRoundTrips() throws IOException {
         PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyPath);
-        Policy policy = Policy.from(policyDef);
+        Policy policy = Policy.from(policyDef, PolicyFixtures.customCheckersFor(policyName));
 
         assertEquals(policyDef, policy.toDefinition());
     }
@@ -63,6 +64,6 @@ public class PolicyFixtureReadTest {
     public void fromDtoToDtoAliasesRoundTrip() throws IOException {
         PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyPath);
 
-        assertEquals(policyDef, Policy.fromDto(policyDef).toDto());
+        assertEquals(policyDef, Policy.fromDto(policyDef, PolicyFixtures.customCheckersFor(policyName)).toDto());
     }
 }

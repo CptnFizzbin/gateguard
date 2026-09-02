@@ -3,17 +3,22 @@ package com.cptnfizzbin.keycard.conditions.logicConditions;
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
 
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Pure combining logic for $or/$and/$not (SPEC_V1-0-0.md §7.4.7-§7.4.9) -
+ * type-checking the operand and the required §7.1 diagnostic on failure
+ * (including the vacuous-empty-array case) is the caller's job
+ * (ConditionResolver), so {@link #or}/{@link #and} assume an
+ * already-validated {@link List}. An empty list naturally falls out
+ * correct here with no special-casing: zero iterations of `or` never
+ * finds a match (false), zero iterations of `and` never finds a
+ * counterexample (true).
+ */
 public final class LogicConditions {
     private LogicConditions() {}
 
-    public static boolean or(ConditionResolver resolver, Object subject, Object conditions) {
-        if (!(conditions instanceof List)) {
-            return false;
-        }
-        List<?> condList = (List<?>) conditions;
-        for (Object cond : condList) {
+    public static boolean or(ConditionResolver resolver, Object subject, List<?> conditions) {
+        for (Object cond : conditions) {
             if (resolver.evaluate(subject, cond)) {
                 return true;
             }
@@ -21,12 +26,8 @@ public final class LogicConditions {
         return false;
     }
 
-    public static boolean and(ConditionResolver resolver, Object subject, Object conditions) {
-        if (!(conditions instanceof List)) {
-            return false;
-        }
-        List<?> condList = (List<?>) conditions;
-        for (Object cond : condList) {
+    public static boolean and(ConditionResolver resolver, Object subject, List<?> conditions) {
+        for (Object cond : conditions) {
             if (!resolver.evaluate(subject, cond)) {
                 return false;
             }

@@ -1,11 +1,13 @@
 package com.cptnfizzbin.keycard.integration;
 
 import com.cptnfizzbin.keycard.policy.Policy;
+import com.cptnfizzbin.keycard.policy.PolicyDefinition;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,18 +16,19 @@ import java.util.stream.Collectors;
 
 /**
  * Shared helpers for every compliance-fixture-driven integration suite -
- * {@link PolicyFixtures} (the pre-v1 fixtures under test/fixtures/policies)
- * and {@link V1Fixtures} (the spec-native fixtures under test/fixtures/v1)
+ * {@link PolicyFixtures} (the fixtures under test/fixtures/policies) and
+ * {@link V1Fixtures} (the spec-native fixtures under test/fixtures/v1)
  * today, and any future fixture set. Not a test class itself.
  *
  * Factors out the parts that don't depend on a fixture format's on-disk
- * shape: discovering `*.yaml` files, the `{ action, subject, subjectData?,
- * expected }` shape every format's individual cases boil down to once
- * parsed, resolving one such case against a {@link Policy}, and filtering
- * fixtures by the SemVer `version` they declare - so each format-specific
- * loader only has to own parsing its own document shape into that common
- * {@link TestCase}, not the discovery/resolution/filtering mechanics
- * around it.
+ * shape: discovering `*.yaml` files, parsing the v1 `rules`/`meta` shape
+ * (SPEC_V1-0-0.md §3) shared by every fixture format, the `{ action,
+ * subject, subjectData?, expected }` shape every format's individual
+ * cases boil down to once parsed, resolving one such case against a
+ * {@link Policy}, and filtering fixtures by the SemVer `version` they
+ * declare - so each format-specific loader only has to own parsing its
+ * own document's outer shape into that common {@link TestCase}, not the
+ * discovery/resolution/filtering mechanics around it.
  *
  * KeyCard itself never reads or writes policy.yaml text; parsing it into a
  * plain PolicyDefinition (via SnakeYaml, a test-only dependency) is this
@@ -53,6 +56,60 @@ final class ComplianceFixtures {
                 .sorted()
                 .collect(Collectors.toList());
         }
+    }
+
+    /** Parses a raw `rules:` list of `[effect, action, subject, conditions?]` tuples into `Rule`s (SPEC_V1-0-0.md §3.3). */
+    @SuppressWarnings("unchecked")
+    static List<PolicyDefinition.Rule> toRules(List<?> rawRules) {
+        List<PolicyDefinition.Rule> rules = new ArrayList<>();
+        for (Object o : rawRules) {
+            List<?> tuple = (List<?>) o;
+            String effect = String.valueOf(tuple.get(0));
+            String action = String.valueOf(tuple.get(1));
+            String subjectName = String.valueOf(tuple.get(2));
+            Map<String, Object> conditions = tuple.size() > 3 ? (Map<String, Object>) tuple.get(3) : null;
+            rules.add(new PolicyDefinition.Rule(effect, action, subjectName, conditions));
+        }
+        return rules;
+    }
+
+    /**
+     * Parses a raw `meta:` map into a {@link PolicyDefinition.Meta},
+     * preserving the "not declared" vs. "explicitly null" distinction for
+     * anyAction/anySubject (SPEC_V1-0-0.md §3.2.1) via {@code
+     * containsKey}, since a SnakeYaml-parsed map can tell the two apart
+     * where a plain nullable field can't.
+     */
+    @SuppressWarnings("unchecked")
+    static PolicyDefinition.Meta toMeta(Map<String, Object> rawMeta) {
+        if (rawMeta == null) return null;
+
+        PolicyDefinition.Meta.Builder builder = PolicyDefinition.Meta.builder();
+        if (rawMeta.containsKey("anyAction")) {
+            builder.anyAction((String) rawMeta.get("anyAction"));
+        }
+        if (rawMeta.containsKey("anySubject")) {
+            builder.anySubject((String) rawMeta.get("anySubject"));
+        }
+        if (rawMeta.get("actions") != null) {
+            builder.actions(toStringList((List<?>) rawMeta.get("actions")));
+        }
+        if (rawMeta.get("subjects") != null) {
+            builder.subjects(toStringList((List<?>) rawMeta.get("subjects")));
+        }
+        if (rawMeta.get("customOperators") != null) {
+            builder.customOperators(toStringList((List<?>) rawMeta.get("customOperators")));
+        }
+        if (rawMeta.containsKey("application")) {
+            builder.application(rawMeta.get("application"));
+        }
+        return builder.build();
+    }
+
+    private static List<String> toStringList(List<?> raw) {
+        List<String> result = new ArrayList<>();
+        for (Object o : raw) result.add(String.valueOf(o));
+        return result;
     }
 
     /**
