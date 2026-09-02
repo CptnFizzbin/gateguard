@@ -35,7 +35,9 @@ builder **MUST** validate eagerly; see §6 and §8 (EC-6).
 
 - **`MAJOR`** identifies a breaking change — one where a document valid and
   meaningful under the old `MAJOR` version could parse differently, mean
-  something different, or become invalid under the new one. Implementations
+  something different, or become invalid under the new one. A non-backward-
+  compatible change to a pre-packaged (built-in) operator's behavior (§7.4)
+  is a `MAJOR` change for the same reason. Implementations
   **MAY**
   provide support for a different `MAJOR` version than the one they primarily
   target (e.g. a 2.x implementation **MAY** still understand 1.x documents), but
@@ -61,10 +63,21 @@ builder **MUST** validate eagerly; see §6 and §8 (EC-6).
   into alignment with already-published normative behavior **MAY** be released
   under that implementation's own `PATCH` version — it isn't a spec-level change
   at all, since the corrected behavior was already required.
-- An implementation **MUST** stamp its own supported version — not merely echo
-  an input document's version — whenever it serializes a
-  `PolicyDefinition` it produced or assembled (e.g. `PolicyBuilder.buildDef()`
-  MUST write the version the builder itself implements).
+- Serializing a `PolicyDefinition` that a `PolicyBuilder` assembled from
+  scratch **MUST** stamp the builder's own implemented version — not an
+  arbitrary or inherited value — since no input document's version exists to
+  preserve (e.g. `PolicyBuilder.buildDef()` **MUST** write the version the
+  builder itself implements). Serializing a `PolicyDefinition` obtained from
+  an existing `Policy` (e.g. `Policy.toDefinition()`/`def()`), by contrast,
+  **MUST** preserve that input definition's own `version` rather than
+  overwrite it with the implementation's — a `Policy` round-tripped back to
+  a definition **MUST NOT** silently claim a different version than the
+  document it was constructed from.
+- Implementations **MAY** provide an option to disable `MINOR` version
+  verification (e.g. for a caller that wants to accept a document declaring
+  a newer `MINOR` than the implementation knows, at its own risk) — but this
+  **MUST** be an explicit opt-in; the default behavior is the `MINOR` check
+  above.
 
 See EC-11 for the exception-throwing behavior in full.
 
@@ -79,10 +92,13 @@ at runtime.
   previously-valid document invalid (removing a field, operator, or matching
   guarantee; narrowing what was previously valid; changing a default).
 - **`MINOR`**: any purely additive change — a new optional field, a new
-  operator, new advisory (SHOULD/ **MAY**) guidance — that cannot alter the
+  operator, new advisory (SHOULD/MAY) guidance — that cannot alter the
   outcome for any document that doesn't use the new feature.
 - **`PATCH`**: wording-only changes with zero effect on any implementation's
-  behavior (typo fixes, clarified examples, added cross-references).
+  behavior (typo fixes, clarified examples, added cross-references). Since
+  `PATCH` carries no compatibility meaning (§2), a policy document's
+  `version` field MAY omit it — `"1.0"` is a valid shorthand for `"1.0.0"`,
+  with `PATCH` implicitly `0`.
 
 ## 3. Document structure
 
@@ -97,6 +113,7 @@ meta: # optional
   actions: string[]                 # optional catalog — see §4
   subjects: string[]                # optional catalog — see §5
   customOperators: string[]         # optional catalog — see §7.4.12
+  application: any                  # optional, opaque application data — see §3.2.4
 
 rules:
   - [ Effect, Action, Subject, Conditions? ]
@@ -113,7 +130,7 @@ rules:
 
 ### 3.2 meta fields
 
-`meta` is an **OPTIONAL** object grouping five independent fields. All of the
+`meta` is an **OPTIONAL** object grouping six independent fields. All of the
 following fields are **OPTIONAL** as well.
 
 #### 3.2.1 `meta.anyAction` / `meta.anySubject`
@@ -133,10 +150,9 @@ implementations **MUST** throw a `PolicyLoadException` if some rule's action
 isn't `meta.anyAction` and isn't listed in `meta.actions`
 (symmetrically for subjects/`meta.subjects`). See EC-8.
 
-The wildcard token **SHOULD** be excluded from the catalog — it **MUST**
-always be recognized regardless of whether it's listed, so enumerating it
-alongside literal names adds nothing; `meta.actions`/`meta.subjects` are for
-the concrete vocabulary a policy uses, not the wildcard mechanism itself.
+The wildcard token **SHOULD** be excluded from the catalog;
+`meta.actions`/`meta.subjects` are for the concrete vocabulary a policy
+uses, not the wildcard mechanism itself.
 
 A name listed in the catalog that no rule actually uses **MUST NOT**
 be treated as an issue. These catalogs describe the vocabulary a policy is
@@ -170,6 +186,18 @@ only place a reader can discover which external checkers the host application
 needs to register, so declaring it matters more here than for the other two
 catalogs.
 
+#### 3.2.4 `meta.application`
+
+An open slot for a host application to embed its own custom data in the
+`PolicyDefinition` — this spec imposes no shape on it and gives it no
+meaning. Implementations **MAY** expose `meta.application` back to the
+application (e.g. via `def()`/`toDefinition()`), but **MUST NOT** raise an
+error or otherwise reject a definition merely because `meta.application` is
+present, regardless of its shape or contents. It is exempt from every other
+`meta` field's rules in this section — unlike `meta.actions`/
+`meta.subjects`/`meta.customOperators`, it is never validated, enforced, or
+cross-checked against `rules`.
+
 ### 3.3 rules
 
 `rules` **MUST** be present and **MAY** be an empty array. It is a single,
@@ -187,8 +215,9 @@ A rule tuple with a missing `Effect`, `Action`, or `Subject` (fewer than 3
 elements), or an `Effect` that isn't `"allow"`/`"deny"`, is malformed.
 `Policy.from(...)` (or any equivalent construction entry point) **MUST** throw a
 `PolicyLoadException` when given a definition containing a malformed rule
-tuple — it **MUST NOT** silently drop or ignore it. Detecting this is
-`Policy.from`'s job, not something deferred to evaluation time. See EC-10.
+tuple — it **MUST NOT** silently drop or ignore it. Detecting this **MUST**
+be done during construction of the policy, not deferred to evaluation time.
+See EC-10.
 
 ## 4. Actions
 

@@ -19,3 +19,9 @@ specification.
 - **PolicyDefinition** - (PolicyDef) a text based encoding of what
   permissions the user is allowed/denied
 - **Policy** - an object that can be used to perform checks against/with
+- **Building a Policy** - using a `PolicyBuilder` to create a
+  `PolicyDefinition`
+- **Constructing a Policy** - reading a `PolicyDefinition` and converting it
+  into a `Policy`
+- **Evaluating a Policy** - performing a check (an action and a subject)
+  against a `Policy`
