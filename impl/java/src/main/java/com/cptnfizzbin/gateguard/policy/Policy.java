@@ -7,6 +7,7 @@ import com.cptnfizzbin.gateguard.conditions.Operator;
 import com.cptnfizzbin.gateguard.errors.PolicyException;
 import com.cptnfizzbin.gateguard.errors.PolicyLoadException;
 import com.cptnfizzbin.gateguard.errors.PolicyVersionException;
+import com.cptnfizzbin.gateguard.version.GateGuardVersion;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -17,12 +18,13 @@ import java.util.Set;
 public final class Policy {
     /**
      * The highest version this implementation supports natively -
-     * SPEC_V1-0-0.md §2. PATCH never affects compatibility. Also the
-     * single source of truth for {@link com.cptnfizzbin.gateguard.builder.PolicyBuilder#BUILDER_VERSION},
-     * so a builder can never stamp a version this same implementation
-     * would then refuse to load.
+     * SPEC_V1-0-0.md §2. PATCH never affects compatibility. Parsed from
+     * {@link GateGuardVersion#GATEGUARD_POLICY_VERSION}, the single source
+     * of truth {@link com.cptnfizzbin.gateguard.builder.PolicyBuilder#BUILDER_VERSION}
+     * reads from too, so a builder can never stamp a version this same
+     * implementation would then refuse to load.
      */
-    public static final SemVer SUPPORTED_VERSION = SemVer.parse("1.0.0");
+    public static final SemVer SUPPORTED_VERSION = SemVer.parse(GateGuardVersion.GATEGUARD_POLICY_VERSION);
 
     private final PolicyDefinition definition;
     private final ConditionResolver resolver;
@@ -184,15 +186,7 @@ public final class Policy {
         List<String> declared = meta != null ? meta.getOperators() : null;
         if (declared == null) return;
 
-        Set<String> registered = resolver.registeredOperatorNames();
-        for (String name : declared) {
-            if (!registered.contains(name)) {
-                throw new PolicyLoadException(
-                    "meta.operators declares \"" + name + "\" but no operator with that name is registered"
-                        + " (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15)."
-                );
-            }
-        }
+        resolver.assertAllRegistered(declared);
     }
 
     private static void validateRules(PolicyDefinition definition) {
@@ -247,7 +241,7 @@ public final class Policy {
 
             if (operatorsCatalog != null && conditions != null) {
                 Set<String> used = new HashSet<>();
-                CustomOperators.collect(conditions, used);
+                ConditionResolver.collectCustomOperatorNames(conditions, used);
                 for (String op : used) {
                     if (!operatorsCatalog.contains(op)) {
                         throw new PolicyLoadException(

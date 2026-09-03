@@ -1,6 +1,7 @@
 package com.cptnfizzbin.gateguard.integration;
 
 import com.cptnfizzbin.gateguard.policy.Policy;
+import com.cptnfizzbin.gateguard.version.GateGuardVersion;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,14 +37,17 @@ public class V1ConformanceFixtureTest {
 
     /**
      * The highest v1 SemVer this suite (and the {@code Policy}
-     * implementation it exercises) is written against. Baked into the
-     * suite itself - rather than left to whatever an external default
-     * happens to be - so "which version this runs compliant with" is a
-     * property of the code: bump it only once the implementation has
-     * actually been updated to handle whatever a newer MINOR version's
-     * fixtures add, not merely because such fixtures exist.
+     * implementation it exercises) is written against - single-sourced
+     * from {@link GateGuardVersion} alongside {@code Policy}'s
+     * {@code SUPPORTED_VERSION} and {@code PolicyBuilder}'s {@code
+     * BUILDER_VERSION}, rather than a separately hand-maintained literal,
+     * so "which version this runs compliant with" can't quietly drift from
+     * what the implementation actually supports. Should the two ever need
+     * to diverge (this suite's adapter lagging a MINOR bump the rest of
+     * the implementation has already picked up), replace this reference
+     * with an explicit, separately-tracked literal.
      */
-    private static final String COMPLIANT_VERSION = "1.0.0";
+    private static final String COMPLIANT_VERSION = GateGuardVersion.GATEGUARD_POLICY_VERSION;
 
     @Parameters(name = "{0} > {1} > {2}")
     public static Collection<Object[]> cases() throws IOException {

@@ -10,19 +10,28 @@ public final class Wildcards {
     private static final WildcardToken.Named DEFAULT_WILDCARD = new WildcardToken.Named("_ANY_");
 
     /**
+     * A declared {@link WildcardToken}, or the "_ANY_" default when none
+     * was declared ({@code null}) - the shared building block behind
+     * {@link #effectiveAnyAction}/{@link #effectiveAnySubject}, and
+     * reusable wherever a token needs resolving before a {@code Meta}
+     * exists yet (e.g. {@code PolicyBuilder}, still accumulating rules).
+     */
+    public static WildcardToken orDefault(WildcardToken declared) {
+        return declared != null ? declared : DEFAULT_WILDCARD;
+    }
+
+    /**
      * meta.anyAction: absent (a {@code null} {@link PolicyDefinition.Meta#getAnyAction()})
      * -&gt; the "_ANY_" default; otherwise whatever {@link WildcardToken}
      * was declared ({@link WildcardToken.Disabled} or {@link WildcardToken.Named}).
      */
     public static WildcardToken effectiveAnyAction(PolicyDefinition.Meta meta) {
-        if (meta == null || meta.getAnyAction() == null) return DEFAULT_WILDCARD;
-        return meta.getAnyAction();
+        return orDefault(meta != null ? meta.getAnyAction() : null);
     }
 
     /** meta.anySubject: symmetric with {@link #effectiveAnyAction} in every respect. */
     public static WildcardToken effectiveAnySubject(PolicyDefinition.Meta meta) {
-        if (meta == null || meta.getAnySubject() == null) return DEFAULT_WILDCARD;
-        return meta.getAnySubject();
+        return orDefault(meta != null ? meta.getAnySubject() : null);
     }
 
     /** True when `value` matches `ruleValue` exactly, or `ruleValue` is the (non-disabled) wildcard token. */

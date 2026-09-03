@@ -106,13 +106,23 @@ public final class PolicyDefinition {
              * {@code PolicyLoadException} immediately.
              */
             public Builder anyAction(Object value) {
-                this.anyAction = WildcardToken.of(value);
+                return anyAction(WildcardToken.of(value));
+            }
+
+            /** Declares the action wildcard token from an already-resolved {@link WildcardToken} - e.g. one a caller (like {@code PolicyBuilder}) resolved earlier. */
+            public Builder anyAction(WildcardToken token) {
+                this.anyAction = token;
                 return this;
             }
 
             /** §3.2.1: declares the subject wildcard token explicitly - symmetric with {@link #anyAction}. */
             public Builder anySubject(Object value) {
-                this.anySubject = WildcardToken.of(value);
+                return anySubject(WildcardToken.of(value));
+            }
+
+            /** Declares the subject wildcard token from an already-resolved {@link WildcardToken} - symmetric with {@link #anyAction(WildcardToken)}. */
+            public Builder anySubject(WildcardToken token) {
+                this.anySubject = token;
                 return this;
             }
 

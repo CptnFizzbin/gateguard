@@ -5,6 +5,7 @@ import com.cptnfizzbin.gateguard.errors.PolicyLoadException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,13 +40,52 @@ public final class ConditionResolver implements OperatorContext {
     }
 
     /**
-     * Every operator name actually registered on this resolver - built-in
-     * and custom alike. Used by {@code Policy} to enforce {@code
-     * meta.operators} registration coverage at construction time (§3.2.3,
-     * EC-15).
+     * §3.2.3, EC-15 (promoted): throws if any name in {@code names} isn't
+     * registered on this resolver - built-in or custom. Used by {@code
+     * Policy} to enforce {@code meta.operators} registration coverage in
+     * full at construction time, regardless of whether any rule actually
+     * reaches a given operator during evaluation.
      */
-    public Set<String> registeredOperatorNames() {
-        return registry.keySet();
+    public void assertAllRegistered(Collection<String> names) {
+        for (String name : names) {
+            if (!registry.containsKey(name)) {
+                throw new PolicyLoadException(
+                    "meta.operators declares \"" + name + "\" but no operator with that name is registered"
+                        + " (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15)."
+                );
+            }
+        }
+    }
+
+    /**
+     * Recursively collects every non-built-in, {@code $}-prefixed operator
+     * name used anywhere in a Conditions tree - used by {@code Policy} to
+     * enforce {@code meta.operators} coverage at construction time (§3.2.3,
+     * EC-13).
+     */
+    public static void collectCustomOperatorNames(Object condition, Set<String> out) {
+        if (!(condition instanceof Map)) return;
+
+        Map<?, ?> map = (Map<?, ?>) condition;
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+
+            if (key.startsWith("$")) {
+                if (!BUILTIN_OPERATORS.contains(key)) out.add(key);
+                if (key.equals("$or") || key.equals("$and")) {
+                    if (value instanceof List) {
+                        for (Object c : (List<?>) value) collectCustomOperatorNames(c, out);
+                    }
+                } else if (key.equals("$not")) {
+                    collectCustomOperatorNames(value, out);
+                } else if (key.equals("$field") && value instanceof List && ((List<?>) value).size() == 2) {
+                    collectCustomOperatorNames(((List<?>) value).get(1), out);
+                }
+            } else {
+                collectCustomOperatorNames(value, out);
+            }
+        }
     }
 
     /**

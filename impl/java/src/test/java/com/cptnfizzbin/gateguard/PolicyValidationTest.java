@@ -2,17 +2,23 @@ package com.cptnfizzbin.gateguard;
 
 import org.junit.Test;
 
+import com.cptnfizzbin.gateguard.action.Action;
 import com.cptnfizzbin.gateguard.action.ActionFactory;
+import com.cptnfizzbin.gateguard.builder.PolicyBuilder;
 import com.cptnfizzbin.gateguard.conditions.Operator;
+import com.cptnfizzbin.gateguard.errors.PolicyArgumentException;
 import com.cptnfizzbin.gateguard.policy.Policy;
 import com.cptnfizzbin.gateguard.policy.PolicyDefinition;
 import com.cptnfizzbin.gateguard.errors.PolicyLoadException;
 import com.cptnfizzbin.gateguard.errors.PolicyVersionException;
+import com.cptnfizzbin.gateguard.subject.Subject;
 import com.cptnfizzbin.gateguard.subject.SubjectFactory;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -147,5 +153,63 @@ public class PolicyValidationTest {
     public void throwsPolicyLoadExceptionWhenAnyActionIsDeclaredANonBooleanNonStringValue() {
         assertThrows(PolicyLoadException.class, () ->
             PolicyDefinition.Meta.builder().anyAction(42));
+    }
+
+    // --- PolicyBuilder derives meta.actions/subjects/operators from usage; only the wildcard tokens are ever declared explicitly ---
+
+    @Test
+    public void buildDefDerivesActionsSubjectsAndOperatorsFromWhatWasActuallyUsed() {
+        Subject<?> article = SubjectFactory.create("Article");
+        Subject<?> user = SubjectFactory.create("User");
+        Action<String> read = ActionFactory.create("Read");
+        Action<String> update = ActionFactory.create("Update");
+        Operator hasRole = Operator.of("$hasRole", (s, v, ctx) -> true);
+
+        PolicyDefinition def = new PolicyBuilder(List.of(hasRole))
+            .allow(read, article)
+            .allow(update, user, Map.of("$hasRole", "admin"))
+            .buildDef();
+
+        assertEquals(List.of("Read", "Update"), def.getMeta().getActions());
+        assertEquals(List.of("Article", "User"), def.getMeta().getSubjects());
+        assertEquals(List.of("$hasRole"), def.getMeta().getOperators());
+    }
+
+    @Test
+    public void buildDefLeavesWildcardTokensUndeclaredByDefault() {
+        PolicyDefinition def = new PolicyBuilder()
+            .allow(ActionFactory.create("Read"), SubjectFactory.create("Article"))
+            .buildDef();
+
+        // Undeclared -> null on Meta, so Wildcards.effectiveAnyAction/
+        // effectiveAnySubject fall back to the "_ANY_" default - a
+        // PolicyBuilder() with no wildcard args MUST NOT come out as
+        // "explicitly disabled" (that's what WildcardToken.of(null) means).
+        assertEquals(null, def.getMeta().getAnyAction());
+        assertEquals(null, def.getMeta().getAnySubject());
+    }
+
+    @Test
+    public void wildcardOnlyConstructorDeclaresJustTheTokensRequested() {
+        Policy policy = new PolicyBuilder("*", false)
+            .allow(ActionFactory.create("*"), SubjectFactory.create("Article"))
+            .allow(ActionFactory.create("Read"), SubjectFactory.create("*"))
+            .build();
+
+        // "*" is now the action wildcard token: a rule naming it as its
+        // action matches any incoming action.
+        assertTrue(policy.can(ActionFactory.create("AnythingGoes"), SubjectFactory.create("Article")));
+
+        // The subject wildcard is disabled (false): a rule's literal "*"
+        // subject only matches an incoming subject also literally named "*".
+        assertFalse(policy.can(ActionFactory.create("Read"), SubjectFactory.create("AnySubjectName")));
+        assertTrue(policy.can(ActionFactory.create("Read"), SubjectFactory.create("*")));
+    }
+
+    @Test
+    public void wildcardOnlyConstructorStillCatchesEc6AtAddRuleTime() {
+        assertThrows(PolicyArgumentException.class, () ->
+            new PolicyBuilder("*", "*")
+                .allow(ActionFactory.create("*"), SubjectFactory.create("*"), Map.of("owner_id", 1)));
     }
 }
