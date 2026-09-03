@@ -66,7 +66,7 @@ Condition =
   | LteCondition = { $lte: TValue } //=> TSubject <= TValue
   | InCondition = { $in: TValue[] } //=> TValue[].contains(TSubject)
   | HasCondition = { $has: TValue } //=> TSubject[].contains(TValue)
-  | SubstrCondition = { $substr: TValue } //=> a small non-regex pattern language matches TSubject
+  | SubstrOperator = { $substr: TValue } //=> a small non-regex pattern language matches TSubject
   | OrCondition = { $or: Condition[] } //=> Condition[].any(TSubject)
   | AndCondition = { $and: Condition[] } //=> Condition[].all(TSubject)
   | NotCondition = { $not: Condition } //=> !Condition(TSubject)

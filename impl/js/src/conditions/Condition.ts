@@ -1,8 +1,7 @@
+import {JsonValue} from "../lib/json";
+
 export type Condition =
-  | string
-  | number
-  | boolean
-  | null
+  | JsonValue
   | { [key: string]: Condition };
 
 export type CustomConditionChecker = {

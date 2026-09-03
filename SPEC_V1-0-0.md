@@ -293,7 +293,7 @@ function can (action, subject) {
     return effect == 'allow'
   }
 
-  return false // nothing matched: default deny
+  return false // nothing matched: operators deny
 }
 
 function matchesAction (action, ruleAction) {
@@ -304,7 +304,7 @@ function matchesSubject (name, ruleSubject) {
   return name == ruleSubject || ruleSubject == effectiveAnySubject(meta)
 }
 
-// meta.anyAction/meta.anySubject: absent -> "_ANY_" default;
+// meta.anyAction/meta.anySubject: absent -> "_ANY_" operators;
 // an explicit string -> that string; explicit null -> DISABLED (a
 // sentinel no rule's Action/Subject can ever equal, so the wildcard
 // branch of matchesAction/matchesSubject above never succeeds).
@@ -524,16 +524,12 @@ Token `$`
 pattern's last character.
 
 Token `*`
-: matches **one or more** characters ("lazy")
-
-Token `**`
-: matches **one or more** characters ("greedy")
+: matches **zero or more** characters
 
 Token `\`
-: escapes the next character, making it literal (`\^`, `\$`, `\*`, `\\` are
-literal `^`, `$`, `*`, `\`). A trailing `\` with nothing following it, or a `\`
-before a character that isn't one of the specials above, **MUST** be treated as
-a literal `\`.
+: escapes the next character, making it literal. For example`\^`, `\$`, `\*`, 
+`\\`, `\e` are the literals `^`, `$`, `*`, `\`, `e`). A trailing `\` with 
+nothing following it **MUST** be ignored.
 
 **Requirements:**
 

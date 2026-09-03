@@ -1,21 +1,27 @@
 // Actions
-export type { Action, InferActions } from "./action";
-export { createAction } from "./action";
+import {setLogger} from "./lib/logger";
+
+export type {Action, InferActions} from "./action";
+export {createAction} from "./action";
 
 // Subjects
-export type { Subject, SubjectDef, SubjectRef, InferSubjects } from "./subject";
-export { createSubject } from "./subject";
+export type {Subject, SubjectDef, SubjectRef, InferSubjects} from "./subject";
+export {createSubject} from "./subject";
 
 // Conditions
-export type { Condition, CustomConditionChecker } from "./conditions";
-export { ConditionResolver } from "./conditions";
+export type {Condition, CustomConditionChecker} from "./conditions";
+export {ConditionResolver} from "./conditions";
 
 // Policy
-export type { Rule, RuleTuple, Meta, Effect, PolicyDefinition } from "./policy";
-export { Policy } from "./policy";
+export type {Rule, RuleTuple, Meta, Effect, PolicyDefinition} from "./policy";
+export {Policy} from "./policy";
 
 // PolicyBuilder
-export { PolicyBuilder } from "./builder";
+export {PolicyBuilder} from "./builder";
 
 // Errors
-export { PolicyError, PolicyLoadException, PolicyVersionException, PolicyArgumentError } from "./errors";
+export {PolicyError, PolicyLoadException, PolicyVersionException, PolicyArgumentError} from "./errors";
+
+export const KeycardConfig = {
+  setLogger: setLogger
+}

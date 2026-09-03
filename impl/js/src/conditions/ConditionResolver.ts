@@ -1,4 +1,11 @@
-import { Condition, CustomConditionChecker } from "./Condition";
+import {Condition} from "./Condition";
+import {Operator} from "./operators/operator";
+import {DefaultOperators} from "./operators/defaultOperators";
+import {PolicyError} from "../errors";
+import {JsonValue} from "../lib/json";
+import {getLogger} from "../lib/logger";
+
+const logger = getLogger()
 
 /**
  * Implements SPEC_V1-0-0.md §7: the condition language and its
@@ -16,7 +23,7 @@ const DIAGNOSTIC_PREFIX = "[KeyCard]";
  */
 function logTypeIssue(operator: string, message: string): void {
   // eslint-disable-next-line no-console
-  console.error(`${DIAGNOSTIC_PREFIX} ${operator}: ${message}`);
+  logger.error(`${DIAGNOSTIC_PREFIX} ${operator}: ${message}`);
 }
 
 /** §7.4.1: value equality for primitives - not reference/identity equality, and (per `===`) never treats NaN as equal to itself. */
@@ -113,43 +120,13 @@ function parseSubstrPattern(raw: string): RegExp | null {
 type BuiltinOperator = (resolver: ConditionResolver, subject: any, value: any) => boolean;
 
 export class ConditionResolver {
-  /**
-   * Every operator this resolver understands natively (§7.4.1-§7.4.11),
-   * keyed by its `$`-prefixed name - the single source of truth for both
-   * dispatch and "is this name built-in" (no separately-maintained name
-   * list to fall out of sync with it).
-   */
-  private static readonly BUILTIN_OPERATOR_IMPLS: Record<string, BuiltinOperator> = {
-    $eq: (r, s, v) => valuesEqual(s, v),
-    $ne: (r, s, v) => !valuesEqual(s, v),
-    $gt: (r, s, v) => r.numericCompare("$gt", s, v, (a, b) => a > b),
-    $gte: (r, s, v) => r.numericCompare("$gte", s, v, (a, b) => a >= b),
-    $lt: (r, s, v) => r.numericCompare("$lt", s, v, (a, b) => a < b),
-    $lte: (r, s, v) => r.numericCompare("$lte", s, v, (a, b) => a <= b),
-    $in: (r, s, v) => r.inCheck(s, v),
-    $has: (r, s, v) => r.hasCheck(s, v),
-    $substr: (r, s, v) => r.substrCheck(s, v),
-    $or: (r, s, v) => r.orCheck(s, v),
-    $and: (r, s, v) => r.andCheck(s, v),
-    $not: (r, s, v) => !r.evaluate(s, v),
-    $field: (r, s, v) => r.fieldOpCheck(s, v),
-  };
+  private operatorRegistry = new Map<string, Operator>
 
-  /** Every `$`-prefixed key this resolver understands natively - anything else starting with `$` is a custom operator lookup (§7.4.12). */
-  static readonly BUILTIN_OPERATORS: Set<string> = new Set(Object.keys(ConditionResolver.BUILTIN_OPERATOR_IMPLS));
-
-  private customCheckers: CustomConditionChecker;
-  private declaredCustomOperators: Set<string>;
-
-  /**
-   * @param customCheckers runtime checkers for custom `$op` operators (§7.4.12).
-   * @param declaredCustomOperators the policy's `meta.customOperators` catalog, if any -
-   *   used only to distinguish EC-13 (uncataloged, no diagnostic) from EC-15
-   *   (cataloged but never registered, diagnostic required).
-   */
-  constructor(customCheckers?: CustomConditionChecker, declaredCustomOperators?: Iterable<string>) {
-    this.customCheckers = customCheckers ?? {};
-    this.declaredCustomOperators = new Set(declaredCustomOperators ?? []);
+  constructor(operators: Operator[] = []) {
+    const allOperators = [...DefaultOperators, ...operators]
+    for (const operator of allOperators) {
+      this.operatorRegistry.set(operator.name, operator)
+    }
   }
 
   evaluate(subject: any, condition: Condition): boolean {
@@ -159,8 +136,7 @@ export class ConditionResolver {
       typeof condition === "boolean" ||
       condition === null
     ) {
-      // §7.2: bare-value shorthand for $eq.
-      return valuesEqual(subject, condition);
+      condition = {$eq: condition}
     }
 
     if (typeof condition !== "object") {
@@ -169,7 +145,7 @@ export class ConditionResolver {
 
     // §7.5: every key MUST be evaluated and ANDed together - no key may
     // "consume" the whole object or cause sibling keys to be ignored.
-    for (const [key, value] of Object.entries(condition as Record<string, any>)) {
+    for (const [key, value] of Object.entries(condition)) {
       if (!this.evaluateKey(subject, key, value)) {
         return false;
       }
@@ -183,17 +159,23 @@ export class ConditionResolver {
    * a field name - built-in and custom operators are both resolved the
    * same way, by name, against their respective registries.
    */
-  private evaluateKey(subject: any, key: string, value: any): boolean {
+  private evaluateKey(subject: unknown, key: string, value: JsonValue): boolean {
     if (!key.startsWith("$")) {
       return this.fieldCheck(subject, key, value);
     }
 
-    const builtin = ConditionResolver.BUILTIN_OPERATOR_IMPLS[key];
-    if (builtin) {
-      return builtin(this, subject, value);
-    }
-
-    return this.customOperatorCheck(subject, key, value);
+    const operator = this.operatorRegistry.get(key)
+    if (!operator) throw new PolicyError(`Operator '${key}' not registered`)
+    return operator.resolve(
+      subject,
+      value,
+      {
+        resolveSubcondition: (
+          subject: unknown,
+          condition: Condition
+        ) => this.evaluate(subject, condition)
+      }
+    )
   }
 
   /** §7.4.3: $gt/$gte/$lt/$lte - numeric-only, IEEE-754 double semantics. */
@@ -228,97 +210,13 @@ export class ConditionResolver {
     return subject.some((v) => valuesEqual(v, value));
   }
 
-  /** §7.4.6: $substr - a null/undefined subject is an ordinary non-match, not a type issue; an invalid pattern always is. */
-  private substrCheck(subject: any, pattern: any): boolean {
-    if (typeof pattern !== "string") {
-      logTypeIssue("$substr", `expected a string pattern, got ${typeof pattern}`);
-      return false;
-    }
-    const compiled = parseSubstrPattern(pattern);
-    if (!compiled) {
-      logTypeIssue("$substr", `malformed pattern: ${JSON.stringify(pattern)}`);
-      return false;
-    }
-    if (subject === null || subject === undefined) {
-      return false;
-    }
-    return compiled.test(String(subject));
-  }
-
-  /** §7.4.7: $or - operand must be an array; `$or: []` is vacuously false. */
-  private orCheck(subject: any, operand: any): boolean {
-    if (!Array.isArray(operand)) {
-      logTypeIssue("$or", `expected an array operand, got ${typeof operand}`);
-      return false;
-    }
-    if (operand.length === 0) {
-      logTypeIssue("$or", "empty $or is vacuously false - likely an authoring mistake");
-      return false;
-    }
-    return operand.some((cond: Condition) => this.evaluate(subject, cond));
-  }
-
-  /** §7.4.8: $and - operand must be an array; `$and: []` is vacuously true. */
-  private andCheck(subject: any, operand: any): boolean {
-    if (!Array.isArray(operand)) {
-      logTypeIssue("$and", `expected an array operand, got ${typeof operand}`);
-      return false;
-    }
-    if (operand.length === 0) {
-      logTypeIssue("$and", "empty $and is vacuously true - likely an authoring mistake");
-      return true;
-    }
-    return operand.every((cond: Condition) => this.evaluate(subject, cond));
-  }
-
-  /** §7.4.11: $field - explicit field access, for a field whose name itself starts with "$". */
-  private fieldOpCheck(subject: any, operand: any): boolean {
-    if (!Array.isArray(operand) || operand.length !== 2 || typeof operand[0] !== "string") {
-      logTypeIssue("$field", `expected a [name, Condition] tuple, got ${JSON.stringify(operand)}`);
-      return false;
-    }
-    const [name, condition] = operand;
-    return this.fieldCheck(subject, name, condition);
-  }
-
   /** §7.4.10, §7.3: a missing field (or a non-object subject) makes the whole field-condition false - absence, not a type issue. */
-  private fieldCheck(subject: any, fieldName: string, condition: Condition): boolean {
-    if (subject === null || subject === undefined || typeof subject !== "object" || !(fieldName in subject)) {
-      return false;
-    }
-    return this.evaluate(subject[fieldName], condition);
-  }
-
-  /**
-   * §7.4.12: a custom `$op` - delegates to a registered checker, or
-   * evaluates false (EC-13/EC-15).
-   *
-   * Note on §3.2.3 vs. EC-15: §3.2.3's closing sentence ("implementations
-   * MUST throw a PolicyLoadException if a behavior is not provided to the
-   * constructor") read literally would mean any cataloged-but-unregistered
-   * operator throws at construction time - but EC-15 explicitly requires
-   * the opposite (resolves to false, with a diagnostic, and MUST NOT
-   * throw), and that's also what
-   * test/fixtures/v1/09-custom-operators.yaml's "cataloged but
-   * never-registered" case expects. This method follows EC-15 and the
-   * conformance suite; treat §3.2.3's closing sentence as an error in the
-   * spec prose rather than normative behavior to implement.
-   */
-  private customOperatorCheck(subject: any, op: string, value: any): boolean {
-    const checker = this.customCheckers[op];
-    if (checker) {
-      return checker(subject, value);
-    }
-    if (this.declaredCustomOperators.has(op)) {
-      // EC-15: cataloged in meta.customOperators, but nothing was ever
-      // registered for it at runtime - a worth-surfacing configuration bug,
-      // unlike the general "uncataloged" case below.
-      logTypeIssue(op, "declared in meta.customOperators but no checker is registered for it");
-    }
-    // EC-13: an unregistered, uncataloged operator is ordinary unmatched
-    // vocabulary (a possible typo), not a type issue - no diagnostic.
-    return false;
+  private fieldCheck(subject: unknown, fieldName: string, condition: Condition): boolean {
+    return (
+      subject !== null
+      && typeof subject === "object"
+      && fieldName in subject
+      && this.evaluate((subject as { [fieldName]: unknown })[fieldName], condition)
+    )
   }
 }
-
-export const BUILTIN_OPERATORS = ConditionResolver.BUILTIN_OPERATORS;

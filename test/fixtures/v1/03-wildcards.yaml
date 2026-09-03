@@ -1,5 +1,5 @@
 version: "1.0.0"
-name: "default _ANY_ wildcard"
+name: "operators _ANY_ wildcard"
 description: >
   meta/meta.anyAction/meta.anySubject are all absent, so the wildcard token
   defaults to "_ANY_" for both positions (§4, §5).

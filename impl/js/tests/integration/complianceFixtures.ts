@@ -21,7 +21,7 @@ export interface ComplianceCase {
   subjectData?: Record<string, unknown>;
 }
 
-/** `*.yaml` files directly under `dir` for which `filter` holds (default: all of them), sorted by name. */
+/** `*.yaml` files directly under `dir` for which `filter` holds (operators: all of them), sorted by name. */
 export function listYamlFiles(dir: string, filter: (fileName: string) => boolean = () => true): string[] {
   return fs
     .readdirSync(dir)
@@ -81,7 +81,7 @@ export const MAX_VERSION_ENV_VAR = "KEYCARD_FIXTURES_MAX_VERSION";
  * rather than defaulting to "run everything", so a suite whose adapter
  * hasn't caught up to a newer MINOR version's fixtures skips them
  * automatically, with no external configuration required;
- * `MAX_VERSION_ENV_VAR` overrides that baked-in default when set.
+ * `MAX_VERSION_ENV_VAR` overrides that baked-in operators when set.
  */
 export function isIncluded(fixtureVersion: string, compliantVersion: string): boolean {
   const override = process.env[MAX_VERSION_ENV_VAR];

@@ -30,6 +30,25 @@ cases:
 
 ---
 version: "1.0.0"
+name: "$substr: literal matching - substring in middle"
+rules:
+  - [allow, Read, Article, { title: { $substr: oob } }]
+
+cases:
+  - name: "substring in middle: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "substring absent: denied"
+    subjectData: { title: "fizzbuzz" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
 name: "$substr: start anchor (§7.4.6)"
 rules:
   - [allow, Read, Article, { title: { $substr: "^Getting" } }]
@@ -93,48 +112,212 @@ cases:
 
 ---
 version: "1.0.0"
-name: "$substr: wildcard requires one or more characters (§7.4.6)"
+name: "$substr: wildcard (*) matches zero or more characters (§7.4.6)"
 description: >
-  * and ** are both "one or more characters" - the lazy/greedy distinction
-  has no observable effect on a match/no-match result (v1 has no
-  capture/extraction feature).
+  In the simplified spec, * matches zero or more characters, not one or more.
 rules:
-  - [allow, Read, Article, { title: { $substr: "^A*Z$" } }]
+  - [allow, Read, Article, { title: { $substr: "foo*bar" } }]
 
 cases:
-  - name: "one character fills the gap: allowed"
-    subjectData: { title: AxZ }
+  - name: "zero characters between foo and bar: allowed"
+    subjectData: { title: "foobar" }
     action: Read
     subject: Article
     expected: allow
 
-  - name: "several characters fill the gap: allowed"
-    subjectData: { title: AxyzZ }
+  - name: "one character between foo and bar: allowed"
+    subjectData: { title: "fooybar" }
     action: Read
     subject: Article
     expected: allow
 
-  - name: "zero characters between A and Z: denied, the wildcard needs at least one"
-    subjectData: { title: AZ }
+  - name: "multiple characters between foo and bar: allowed"
+    subjectData: { title: "foo123bar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "pattern mismatch: denied"
+    subjectData: { title: "foobr" }
     action: Read
     subject: Article
     expected: deny
 
 ---
 version: "1.0.0"
-name: "$substr: greedy ** is match-equivalent to lazy * (§7.4.6)"
+name: "$substr: wildcard at start"
 rules:
-  - [allow, Read, Article, { title: { $substr: "^A**Z$" } }]
+  - [allow, Read, Article, { title: { $substr: "*bar" } }]
 
 cases:
-  - name: "one character fills the gap: allowed"
-    subjectData: { title: AxZ }
+  - name: "wildcard at start matches any prefix: allowed"
+    subjectData: { title: "foobar" }
     action: Read
     subject: Article
     expected: allow
 
-  - name: "zero characters between A and Z: denied"
-    subjectData: { title: AZ }
+  - name: "zero characters before literal: allowed"
+    subjectData: { title: "bar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: wildcard at end"
+rules:
+  - [allow, Read, Article, { title: { $substr: "foo*" } }]
+
+cases:
+  - name: "wildcard at end matches any suffix: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "zero characters after literal: allowed"
+    subjectData: { title: "foo" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: single wildcard character"
+rules:
+  - [allow, Read, Article, { title: { $substr: "*" } }]
+
+cases:
+  - name: "wildcard alone matches empty string: allowed"
+    subjectData: { title: "" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "wildcard alone matches any non-empty string: allowed"
+    subjectData: { title: "anything" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: multiple wildcards"
+description: >
+  Multiple wildcards in sequence work as expected with zero-or-more matching.
+rules:
+  - [allow, Read, Article, { title: { $substr: "a*b*c" } }]
+
+cases:
+  - name: "multiple wildcards with zero and one character: allowed"
+    subjectData: { title: "aXbYc" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "multiple wildcards with zero characters each: allowed"
+    subjectData: { title: "abc" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "multiple wildcards with content at end: allowed"
+    subjectData: { title: "aXbYcZ" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: anchored wildcard at start"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^foo*" } }]
+
+cases:
+  - name: "start anchor with wildcard: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "doesn't start with pattern: denied"
+    subjectData: { title: "barfoo" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: anchored wildcard at end"
+rules:
+  - [allow, Read, Article, { title: { $substr: "*bar$" } }]
+
+cases:
+  - name: "end anchor with wildcard: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "doesn't end with pattern: denied"
+    subjectData: { title: "barfoo" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: both anchors with wildcard"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^foo*bar$" } }]
+
+cases:
+  - name: "exact match with wildcard in middle: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "exact match with characters in wildcard: allowed"
+    subjectData: { title: "foodybar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: empty pattern"
+rules:
+  - [allow, Read, Article, { title: { $substr: "" } }]
+
+cases:
+  - name: "empty pattern matches empty string: allowed"
+    subjectData: { title: "" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "empty pattern matches any non-empty string: allowed"
+    subjectData: { title: "anything" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: empty string with both anchors"
+rules:
+  - [allow, Read, Article, { title: { $substr: "^$" } }]
+
+cases:
+  - name: "^$ matches empty string: allowed"
+    subjectData: { title: "" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "^$ doesn't match non-empty string: denied"
+    subjectData: { title: "anything" }
     action: Read
     subject: Article
     expected: deny
@@ -166,6 +349,70 @@ cases:
 
 ---
 version: "1.0.0"
+name: "$substr: escaped asterisk is literal"
+rules:
+  - [allow, Read, Article, { title: { $substr: "foo\\*bar" } }]
+
+cases:
+  - name: "escaped asterisk matches literal asterisk: allowed"
+    subjectData: { title: "foo*bar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "escaped asterisk doesn't act as wildcard: denied"
+    subjectData: { title: "fooXbar" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
+name: "$substr: escaped dollar sign is literal"
+rules:
+  - [allow, Read, Article, { title: { $substr: "end\\$" } }]
+
+cases:
+  - name: "escaped dollar sign matches literal dollar: allowed"
+    subjectData: { title: "end$" }
+    action: Read
+    subject: Article
+    expected: allow
+
+  - name: "escaped dollar doesn't act as anchor: allowed"
+    subjectData: { title: "end$suffix" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: escaped backslash is literal"
+rules:
+  - [allow, Read, Article, { title: { $substr: "\\\\backslash" } }]
+
+cases:
+  - name: "escaped backslash matches literal backslash: allowed"
+    subjectData: { title: "\\backslash" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
+name: "$substr: trailing backslash is ignored (§7.4.6)"
+rules:
+  - [allow, Read, Article, { title: { $substr: "foo\\" } }]
+
+cases:
+  - name: "trailing backslash ignored: allowed"
+    subjectData: { title: "foobar" }
+    action: Read
+    subject: Article
+    expected: allow
+
+---
+version: "1.0.0"
 name: "$substr: an invalid pattern is a type issue, always false (§7.4.6)"
 description: >
   An unescaped ^ anywhere but the first character, or an unescaped $
@@ -188,6 +435,19 @@ cases:
 
 ---
 version: "1.0.0"
+name: "$substr: invalid pattern with $ in middle"
+rules:
+  - [allow, Read, Article, { title: { $substr: "mid$dle" } }]
+
+cases:
+  - name: "invalid pattern with $ in middle never matches"
+    subjectData: { title: "mid$dle" }
+    action: Read
+    subject: Article
+    expected: deny
+
+---
+version: "1.0.0"
 name: "$substr: a null or missing subject is an ordinary non-match, not a type issue (§7.4.6)"
 rules:
   - [allow, Read, Article, { title: { $substr: x } }]
@@ -204,3 +464,5 @@ cases:
     action: Read
     subject: Article
     expected: deny
+
+

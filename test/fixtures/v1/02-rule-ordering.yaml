@@ -27,7 +27,7 @@ cases:
     subjectData: { owner_id: 2, status: archived }
     expected: deny
 
-  - name: "not owner, not archived: neither rule matches (default deny)"
+  - name: "not owner, not archived: neither rule matches (operators deny)"
     action: Update
     subject: Article
     subjectData: { owner_id: 2, status: published }

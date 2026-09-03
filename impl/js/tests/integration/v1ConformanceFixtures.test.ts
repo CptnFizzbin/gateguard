@@ -28,7 +28,7 @@ const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/v1");
 /**
  * The highest v1 SemVer this suite (and the `Policy` implementation it
  * exercises) is written against. Baked into the suite itself - rather
- * than left to whatever an external default happens to be - so "which
+ * than left to whatever an external operators happens to be - so "which
  * version this runs compliant with" is a property of the code: bump it
  * only once the implementation has actually been updated to handle
  * whatever a newer MINOR version's fixtures add, not merely because such

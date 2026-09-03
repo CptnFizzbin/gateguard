@@ -1,11 +1,11 @@
 import * as semver from "semver";
-import { Action } from "../action";
-import { Subject, SubjectDef, SubjectRef } from "../subject";
-import { Condition, ConditionResolver, CustomConditionChecker } from "../conditions";
-import { BUILTIN_OPERATORS } from "../conditions/ConditionResolver";
-import { PolicyError, PolicyLoadException, PolicyVersionException } from "../errors";
-import type { PolicyDefinition, RuleTuple } from "./PolicyDefinition";
-import { DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf } from "./wildcards";
+import {Action} from "../action";
+import {Subject, SubjectDef, SubjectRef} from "../subject";
+import {Condition, ConditionResolver} from "../conditions";
+import {PolicyError, PolicyLoadException, PolicyVersionException} from "../errors";
+import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
+import {DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf} from "./wildcards";
+import {Operator} from "../conditions/operators/operator";
 
 /** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
 const SUPPORTED_VERSION = "1.0.0";
@@ -24,7 +24,6 @@ function collectCustomOperators(condition: Condition | undefined, out: Set<strin
 
   for (const [key, value] of Object.entries(condition as Record<string, any>)) {
     if (key.startsWith("$")) {
-      if (!BUILTIN_OPERATORS.has(key)) out.add(key);
       if (key === "$or" || key === "$and") {
         if (Array.isArray(value)) value.forEach((c: Condition) => collectCustomOperators(c, out));
       } else if (key === "$not") {
@@ -42,18 +41,18 @@ export class Policy<
   TActions extends Action = Action,
   TSubjects extends Subject = Subject
 > {
-  private definition: PolicyDefinition<TActions, TSubjects>;
-  private resolver: ConditionResolver;
+  private readonly definition: PolicyDefinition<TActions, TSubjects>;
+  private readonly resolver: ConditionResolver;
 
   constructor(
     definition: PolicyDefinition<TActions, TSubjects>,
-    customConditions?: CustomConditionChecker
+    operators: Operator[] = []
   ) {
     Policy.validateVersion(definition.version);
     Policy.validateRules(definition);
 
     this.definition = definition;
-    this.resolver = new ConditionResolver(customConditions, definition.meta?.customOperators);
+    this.resolver = new ConditionResolver(operators);
   }
 
   /**
@@ -65,127 +64,11 @@ export class Policy<
   static from<
     TActions extends Action = Action,
     TSubjects extends Subject = Subject
-  >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
-    return new Policy(definition, customConditions);
-  }
-
-  /** Alias of `from`. */
-  static fromDto<
-    TActions extends Action = Action,
-    TSubjects extends Subject = Subject
-  >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
-    return Policy.from(definition, customConditions);
-  }
-
-  def(): PolicyDefinition<TActions, TSubjects> {
-    return this.toDefinition();
-  }
-
-  /** Returns the PolicyDefinition backing this policy. */
-  toDefinition(): PolicyDefinition<TActions, TSubjects> {
-    return this.definition;
-  }
-
-  /** Alias of `toDefinition`. */
-  toDto(): PolicyDefinition<TActions, TSubjects> {
-    return this.toDefinition();
-  }
-
-  can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    return this.checkPermission(action, subject);
-  }
-
-  cannot(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    return !this.can(action, subject);
-  }
-
-  require(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): void {
-    if (!this.can(action, subject)) {
-      throw new PolicyError(
-        `Access denied: cannot ${action} on ${typeof subject === "string" ? subject : JSON.stringify(subject)}`
-      );
-    }
-  }
-
-  /**
-   * SPEC_V1-0-0.md §6: reverse scan over `rules`, returning the effect of
-   * the first (i.e. most-recently-declared) rule whose action, subject,
-   * and (if present) conditions all match. There is no independent
-   * "allow AND NOT deny" veto and no combination of multiple matching
-   * rules: exactly one rule decides the outcome, or none does and the
-   * result is default deny.
-   */
-  private checkPermission(
-    action: TActions,
-    subject: TSubjects | SubjectDef | SubjectRef | string
-  ): boolean {
-    const meta = this.definition.meta;
-    const anyAction = effectiveAnyAction(meta);
-    const anySubject = effectiveAnySubject(meta);
-    const subjectName = this.getSubjectName(subject);
-    const rules = this.definition.rules;
-
-    for (let i = rules.length - 1; i >= 0; i--) {
-      const [effect, ruleAction, ruleSubject, ruleConditions] = rules[i];
-
-      if (!this.matchesAction(action, ruleAction, anyAction)) continue;
-      if (!this.matchesSubject(subjectName, ruleSubject, anySubject)) continue;
-
-      if (ruleConditions) {
-        // A conditional rule can never be satisfied by a bare-type/no-instance
-        // check - there's no instance data for the condition to inspect (EC-7).
-        if (!this.hasInstance(subject)) continue;
-        if (!this.resolver.evaluate(this.getSubjectValue(subject), ruleConditions)) continue;
-        return effect === "allow";
-      }
-
-      return effect === "allow";
-    }
-
-    return false; // EC-1, EC-2: default deny.
-  }
-
-  private matchesAction(action: TActions, ruleAction: TActions | string, anyAction: string | typeof DISABLED): boolean {
-    return action === ruleAction || (anyAction !== DISABLED && ruleAction === anyAction);
-  }
-
-  private matchesSubject(
-    subjectName: string,
-    ruleSubject: TSubjects | SubjectDef | string,
-    anySubject: string | typeof DISABLED
-  ): boolean {
-    const ruleSubjectName = subjectNameOf(ruleSubject);
-    return subjectName === ruleSubjectName || (anySubject !== DISABLED && ruleSubjectName === anySubject);
-  }
-
-  private getSubjectName(subject: TSubjects | SubjectDef | SubjectRef | string): string {
-    return subjectNameOf(subject);
-  }
-
-  /**
-   * True when `subject` carries an instance value a Conditions element can
-   * be evaluated against (a `SubjectRef`, or a plain data object) - false
-   * for a bare string or a `SubjectDef` type token, neither of which has
-   * instance data (§5, EC-7, EC-9).
-   */
-  private hasInstance(subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    if (typeof subject === "string") return false;
-    if (subject && typeof (subject as any).wrap === "function") return false; // a bare SubjectDef
-    return true;
-  }
-
-  /**
-   * The subject value conditions are evaluated against. EC-9: a bare
-   * `SubjectDef` MUST NOT expose fields that make ordinary domain
-   * conditions accidentally match - `hasInstance` above already keeps
-   * every conditional rule from reaching this method for one, so this
-   * path only ever runs for a `SubjectRef` or an already-flat instance
-   * value.
-   */
-  private getSubjectValue(subject: TSubjects | SubjectDef | SubjectRef | string): any {
-    if (typeof subject === "string") return subject;
-    if ("value" in subject && (subject as any).value !== undefined) return (subject as any).value;
-    return subject;
+  >(
+    definition: PolicyDefinition<TActions, TSubjects>,
+    operators: Operator[] = []
+  ): Policy<TActions, TSubjects> {
+    return new Policy(definition, operators);
   }
 
   private static validateVersion(version: string): void {
@@ -270,5 +153,107 @@ export class Policy<
         }
       }
     }
+  }
+
+  /** Returns the PolicyDefinition backing this policy. */
+  toDefinition(): PolicyDefinition<TActions, TSubjects> {
+    return this.definition;
+  }
+
+  can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
+    return this.checkPermission(action, subject);
+  }
+
+  cannot(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
+    return !this.can(action, subject);
+  }
+
+  require(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): void {
+    if (!this.can(action, subject)) {
+      throw new PolicyError(
+        `Access denied: cannot ${action} on ${typeof subject === "string" ? subject : JSON.stringify(subject)}`
+      );
+    }
+  }
+
+  /**
+   * SPEC_V1-0-0.md §6: reverse scan over `rules`, returning the effect of
+   * the first (i.e. most-recently-declared) rule whose action, subject,
+   * and (if present) conditions all match. There is no independent
+   * "allow AND NOT deny" veto and no combination of multiple matching
+   * rules: exactly one rule decides the outcome, or none does and the
+   * result is operators deny.
+   */
+  private checkPermission(
+    action: TActions,
+    subject: TSubjects | SubjectDef | SubjectRef | string
+  ): boolean {
+    const meta = this.definition.meta;
+    const anyAction = effectiveAnyAction(meta);
+    const anySubject = effectiveAnySubject(meta);
+    const subjectName = this.getSubjectName(subject);
+    const rules = this.definition.rules;
+
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const [effect, ruleAction, ruleSubject, ruleConditions] = rules[i];
+
+      if (!this.matchesAction(action, ruleAction, anyAction)) continue;
+      if (!this.matchesSubject(subjectName, ruleSubject, anySubject)) continue;
+
+      if (ruleConditions) {
+        // A conditional rule can never be satisfied by a bare-type/no-instance
+        // check - there's no instance data for the condition to inspect (EC-7).
+        if (!this.hasInstance(subject)) continue;
+        if (!this.resolver.evaluate(this.getSubjectValue(subject), ruleConditions)) continue;
+        return effect === "allow";
+      }
+
+      return effect === "allow";
+    }
+
+    return false; // EC-1, EC-2: operators deny.
+  }
+
+  private matchesAction(action: TActions, ruleAction: TActions | string, anyAction: string | typeof DISABLED): boolean {
+    return action === ruleAction || (anyAction !== DISABLED && ruleAction === anyAction);
+  }
+
+  private matchesSubject(
+    subjectName: string,
+    ruleSubject: TSubjects | SubjectDef | string,
+    anySubject: string | typeof DISABLED
+  ): boolean {
+    const ruleSubjectName = subjectNameOf(ruleSubject);
+    return subjectName === ruleSubjectName || (anySubject !== DISABLED && ruleSubjectName === anySubject);
+  }
+
+  private getSubjectName(subject: TSubjects | SubjectDef | SubjectRef | string): string {
+    return subjectNameOf(subject);
+  }
+
+  /**
+   * True when `subject` carries an instance value a Conditions element can
+   * be evaluated against (a `SubjectRef`, or a plain data object) - false
+   * for a bare string or a `SubjectDef` type token, neither of which has
+   * instance data (§5, EC-7, EC-9).
+   */
+  private hasInstance(subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
+    if (typeof subject === "string") return false;
+    if (subject && typeof (subject as any).wrap === "function") return false; // a bare SubjectDef
+    return true;
+  }
+
+  /**
+   * The subject value conditions are evaluated against. EC-9: a bare
+   * `SubjectDef` MUST NOT expose fields that make ordinary domain
+   * conditions accidentally match - `hasInstance` above already keeps
+   * every conditional rule from reaching this method for one, so this
+   * path only ever runs for a `SubjectRef` or an already-flat instance
+   * value.
+   */
+  private getSubjectValue(subject: TSubjects | SubjectDef | SubjectRef | string): any {
+    if (typeof subject === "string") return subject;
+    if ("value" in subject && (subject as any).value !== undefined) return (subject as any).value;
+    return subject;
   }
 }
