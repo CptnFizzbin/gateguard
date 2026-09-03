@@ -126,18 +126,3 @@ behavior that's merely wrong:
   its `v1ConformanceFixtures.test.ts` is a model for the shape this
   should take.)
 
-## `SubjectDef` evaluation (EC-9)
-
-- The "subject value" used when evaluating conditions against a bare
-  `SubjectDef` (no wrapped instance) is currently, in JS, the value
-  returned by `Policy`'s `getSubjectValue` for anything that isn't a
-  `SubjectRef` or a bare string — which for an actual `SubjectDef`
-  correctly falls back to the `SubjectDef` token object itself. It
-  happens not to expose any domain fields real conditions would check,
-  so it satisfies EC-9's "MUST NOT accidentally match" requirement, via
-  the explicit `hasInstance` check in `impl/js/src/policy/Policy.ts`
-  (a bare `SubjectDef` — detected by its `wrap` function — is never
-  treated as having an instance in the first place, so a conditional
-  rule can't reach `getSubjectValue` for one at all). The same needs
-  verifying once `impl/java` adopts the v1 schema and its own bare-type
-  vs. wrapped-instance handling.
