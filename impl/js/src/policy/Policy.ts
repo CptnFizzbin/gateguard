@@ -20,10 +20,10 @@ export class Policy<
   }
 
   /**
-   * Builds a Policy from an already-parsed PolicyDefinition. KeyCard itself
+   * Builds a Policy from an already-parsed PolicyDefinition. GateGuard itself
    * never reads or writes policy.yaml text - an application (or a test, via
    * a YAML library of its own choosing) parses the file into a plain
-   * PolicyDefinition object and hands it to KeyCard.
+   * PolicyDefinition object and hands it to GateGuard.
    */
   static from<
     TActions extends Action = Action,

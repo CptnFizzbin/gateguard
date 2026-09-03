@@ -86,10 +86,10 @@ fixtures now exist.
 For a one-off run that deliberately narrows or widens that baked-in ceiling
 without editing code:
 
-- JS: set the `KEYCARD_FIXTURES_MAX_VERSION` env var, e.g.
-  `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`.
-- Java: set the `keycard.fixtures.maxVersion` system property, e.g.
-  `mvn test -Dkeycard.fixtures.maxVersion=1.0.0`.
+- JS: set the `GATEGUARD_FIXTURES_MAX_VERSION` env var, e.g.
+  `GATEGUARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`.
+- Java: set the `gateguard.fixtures.maxVersion` system property, e.g.
+  `mvn test -Dgateguard.fixtures.maxVersion=1.0.0`.
 
 Every suite here declares `"1.0.0"`, and both compliance suites currently
 bake in `COMPLIANT_VERSION = "1.0.0"` too, so today this filtering is a

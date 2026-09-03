@@ -1,4 +1,4 @@
-# KeyCard - TypeScript/JavaScript
+# GateGuard - TypeScript/JavaScript
 
 TypeScript access control library inspired by CASL.js. Provides strongly-typed, composable authorization policies with compile-time safety for Actions and Subjects. Runs in the browser as well as server-side (Node.js and other JS runtimes).
 
@@ -13,14 +13,14 @@ TypeScript access control library inspired by CASL.js. Provides strongly-typed, 
 ## Installation
 
 ```bash
-npm install @cptnfizzbin/keycard
+npm install @cptnfizzbin/gateguard
 ```
 
 ## Quick Start
 
 ```typescript
-import { createAction, createSubject, PolicyBuilder, Policy } from '@cptnfizzbin/keycard';
-import type { InferActions, InferSubjects } from '@cptnfizzbin/keycard';
+import { createAction, createSubject, PolicyBuilder, Policy } from '@cptnfizzbin/gateguard';
+import type { InferActions, InferSubjects } from '@cptnfizzbin/gateguard';
 
 // Define your action and subject types
 const Actions = {
@@ -66,7 +66,7 @@ policy.require(Actions.Delete, article); // Throws PolicyError if not allowed
 
 ## Type Safety
 
-KeyCard provides compile-time type safety:
+GateGuard provides compile-time type safety:
 - Actions can only be created with `createAction` 
 - Subjects must match their defined shape
 - Policy methods only accept valid Action/Subject combinations

@@ -66,12 +66,12 @@ export function isCompatible(fixtureVersion: string, maxSupportedVersion: string
 
 /**
  * Env var that overrides a suite's baked-in `compliantVersion` for one run
- * (e.g. `KEYCARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`) - useful for
+ * (e.g. `GATEGUARD_FIXTURES_MAX_VERSION=1.0.0 yarn test run`) - useful for
  * deliberately narrowing or widening the cap without editing code. Unset
  * (the common case) means "use whatever version the compliance suite
  * itself bakes in".
  */
-export const MAX_VERSION_ENV_VAR = "KEYCARD_FIXTURES_MAX_VERSION";
+export const MAX_VERSION_ENV_VAR = "GATEGUARD_FIXTURES_MAX_VERSION";
 
 /**
  * True when a fixture declaring `fixtureVersion` should run against a

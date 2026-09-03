@@ -13,7 +13,7 @@ import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
  * picked up automatically the next time this suite runs - no test code
  * needs to change.
  *
- * KeyCard itself never reads or writes policy.yaml text (that's an
+ * GateGuard itself never reads or writes policy.yaml text (that's an
  * application concern) - so YAML parsing here is done with the `yaml`
  * package (a devDependency of this test suite only) and handed to the
  * library as a plain PolicyDefinition via `Policy.from(...)`.
