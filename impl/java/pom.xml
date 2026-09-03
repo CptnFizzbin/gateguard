@@ -11,7 +11,7 @@
 
     <name>GateGuard</name>
     <description>Type-safe authorization library for Java</description>
-    <url>https://github.com/cptnfizzbin/gateguard</url>
+    <url>https://github.com/cptnfizzbin/gate-guard</url>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
