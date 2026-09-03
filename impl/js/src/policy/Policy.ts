@@ -7,9 +7,10 @@ import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
 import {DISABLED, effectiveAnyAction, effectiveAnySubject} from "./wildcards";
 import {Operator} from "../conditions/operators/operator";
 import {DefaultOperators} from "../conditions/operators/defaultOperators";
+import {GATEGUARD_POLICY_VERSION} from "../version";
 
-/** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
-const SUPPORTED_VERSION = "1.0.0";
+/** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. Single-sourced from {@link GATEGUARD_POLICY_VERSION}, alongside `PolicyBuilder`'s `BUILDER_VERSION`, so the two can never drift apart. */
+const SUPPORTED_VERSION = GATEGUARD_POLICY_VERSION;
 const SUPPORTED_MAJOR = semver.major(SUPPORTED_VERSION);
 const SUPPORTED_MINOR = semver.minor(SUPPORTED_VERSION);
 /** Same MAJOR as SUPPORTED_VERSION, MINOR no higher - PATCH is irrelevant either way (§2). */

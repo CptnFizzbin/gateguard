@@ -4,20 +4,59 @@ import { Condition } from "../conditions";
 import type { RuleTuple, Meta, Effect, PolicyDefinition } from "../policy/PolicyDefinition";
 import { Policy } from "../policy/Policy";
 import { PolicyArgumentError } from "../errors";
+import { Operator } from "../conditions/operators/operator";
 import { DISABLED, effectiveAnyAction, effectiveAnySubject } from "../policy/wildcards";
+import { GATEGUARD_POLICY_VERSION } from "../version";
 
 /** The v1 SemVer this builder implements - stamped onto every `buildDef()` output, per SPEC_V1-0-0.md §2. */
-export const BUILDER_VERSION = "1.0.0";
+export const BUILDER_VERSION = GATEGUARD_POLICY_VERSION;
 
+/**
+ * The only things a caller ever needs to declare explicitly - the
+ * wildcard tokens themselves (§3.2.1), since nothing about them can be
+ * inferred from usage, plus the custom operators to register. `anyAction`/
+ * `anySubject` accept a bare token string, an `Action`/`Subject` (its
+ * `.name` is used), or `null` to disable that wildcard position entirely;
+ * omitted means the §3.2.1 "_ANY_" default applies. Deliberately typed
+ * against the base `Action`/`Subject` (not `TActions`/`TSubjects`) -
+ * a wildcard token isn't one of the policy's own declared actions/
+ * subjects, and tying it to those generics would make passing e.g. a
+ * wildcard `Action` here narrow what `allow`/`deny` accept everywhere else
+ * on the same builder.
+ */
+export interface PolicyBuilderOptions {
+  anyAction?: Action | string | null;
+  anySubject?: Subject | string | null;
+  operators?: Operator[];
+}
+
+function wildcardNameOf(value: Action | Subject | string | null | undefined): string | null | undefined {
+  if (value === null || value === undefined || typeof value === "string") return value;
+  return value.name;
+}
+
+/**
+ * Builds a {@link PolicyDefinition} rule by rule. `meta.actions`/
+ * `meta.subjects`/`meta.customOperators` are never supplied directly -
+ * {@link buildDef} fills them in automatically from what {@link allow}/
+ * {@link deny} actually used and what `operators` actually registered, so
+ * there's no separately hand-maintained catalog to keep in sync by hand.
+ */
 export class PolicyBuilder<
   TActions extends Action = Action,
   TSubjects extends Subject = Subject
 > {
   private rules: RuleTuple[] = [];
-  private meta: Meta;
+  private readonly anyAction: string | null | undefined;
+  private readonly anySubject: string | null | undefined;
+  private readonly operators: Operator[];
+  private readonly actionsUsed = new Set<string>();
+  private readonly subjectsUsed = new Set<string>();
 
-  constructor(meta: Meta = {}) {
-    this.meta = meta;
+  constructor(options: PolicyBuilderOptions = {}) {
+    this.anyAction = wildcardNameOf(options.anyAction);
+    this.anySubject = wildcardNameOf(options.anySubject);
+    this.operators = options.operators ?? [];
   }
 
   allow<T extends TActions>(action: T, subject: TSubjects, conditions?: Condition): this {
@@ -29,15 +68,27 @@ export class PolicyBuilder<
   }
 
   build(): Policy<TActions, TSubjects> {
-    return new Policy(this.buildDef());
+    return new Policy(this.buildDef(), this.operators);
   }
 
   buildDef(): PolicyDefinition {
     return {
       version: BUILDER_VERSION,
-      meta: Object.keys(this.meta).length > 0 ? this.meta : undefined,
+      meta: this.buildMeta(),
       rules: this.rules,
     };
+  }
+
+  /** §3.2.2/§3.2.3: derives `actions`/`subjects`/`customOperators` from what was actually used/registered - see the class doc. */
+  private buildMeta(): Meta {
+    const meta: Meta = {
+      actions: Array.from(this.actionsUsed),
+      subjects: Array.from(this.subjectsUsed),
+    };
+    if (this.anyAction !== undefined) meta.anyAction = this.anyAction;
+    if (this.anySubject !== undefined) meta.anySubject = this.anySubject;
+    if (this.operators.length > 0) meta.customOperators = this.operators.map((op) => op.name);
+    return meta;
   }
 
   private addRule(effect: Effect, action: TActions, subject: TSubjects, conditions?: Condition): this {
@@ -46,8 +97,8 @@ export class PolicyBuilder<
       // action and the subject MUST NOT carry a Conditions element - the
       // builder MUST catch this immediately, rather than waiting for
       // eventual construction (Policy.from) to catch it.
-      const anyAction = effectiveAnyAction(this.meta);
-      const anySubject = effectiveAnySubject(this.meta);
+      const anyAction = effectiveAnyAction({ anyAction: this.anyAction });
+      const anySubject = effectiveAnySubject({ anySubject: this.anySubject });
       if (
         anyAction !== DISABLED && action.name === anyAction &&
         anySubject !== DISABLED && subject.name === anySubject
@@ -57,6 +108,9 @@ export class PolicyBuilder<
         );
       }
     }
+
+    this.actionsUsed.add(action.name);
+    this.subjectsUsed.add(subject.name);
 
     const rule: RuleTuple = conditions !== undefined
       ? [effect, action.name, subject.name, conditions]

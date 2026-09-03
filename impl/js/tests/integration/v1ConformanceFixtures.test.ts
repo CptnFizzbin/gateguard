@@ -3,6 +3,7 @@ import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
 import { Policy, PolicyDefinition } from "../../src";
+import { GATEGUARD_POLICY_VERSION } from "../../src/version";
 import { listYamlFiles, actionArgFor, subjectArgFor, isIncluded } from "./complianceFixtures";
 
 /**
@@ -27,14 +28,17 @@ const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/v1");
 
 /**
  * The highest v1 SemVer this suite (and the `Policy` implementation it
- * exercises) is written against. Baked into the suite itself - rather
- * than left to whatever an external operators happens to be - so "which
- * version this runs compliant with" is a property of the code: bump it
- * only once the implementation has actually been updated to handle
- * whatever a newer MINOR version's fixtures add, not merely because such
- * fixtures exist.
+ * exercises) is written against - single-sourced from
+ * GATEGUARD_POLICY_VERSION alongside `Policy`'s internal
+ * SUPPORTED_VERSION and `PolicyBuilder`'s BUILDER_VERSION, rather than a
+ * separately hand-maintained literal, so "which version this runs
+ * compliant with" can't quietly drift from what the implementation
+ * actually supports. Should the two ever need to diverge (this suite's
+ * adapter lagging a MINOR bump the rest of the implementation has already
+ * picked up), replace this reference with an explicit, separately-tracked
+ * literal.
  */
-const COMPLIANT_VERSION = "1.0.0";
+const COMPLIANT_VERSION = GATEGUARD_POLICY_VERSION;
 
 interface V1Case {
   name?: string;
