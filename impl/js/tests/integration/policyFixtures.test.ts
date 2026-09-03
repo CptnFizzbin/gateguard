@@ -3,7 +3,7 @@ import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
 import { createOperator, Operator, Policy, PolicyDefinition } from "../../src";
-import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
+import { listYamlFiles, actionArgFor, subjectArgFor } from "./complianceFixtures";
 
 /**
  * Metaprogrammed integration suite: every `*.yaml` fixture under
@@ -104,6 +104,6 @@ describe.each(fixtures)("policy fixture: $policyName", ({ policyName, policyPath
   const policy = Policy.from(loadPolicyDef(rawYaml), customConditions);
 
   test.each(cases)("resolves test case: $name", (testCase) => {
-    expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected);
+    expect(policy.can(actionArgFor(testCase), subjectArgFor(testCase))).toBe(testCase.expected);
   });
 });

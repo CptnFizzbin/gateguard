@@ -1,13 +1,17 @@
-import type { SubjectDef, SubjectRef } from "./SubjectDef";
+import { Subject } from "./Subject";
 
-export function createSubject<TSubject>(name: string): SubjectDef<TSubject> {
+function makeSubject<TData>(name: string, instance?: TData): Subject<TData> {
   return {
-    __name: name,
-    wrap(obj: TSubject): SubjectRef<TSubject> {
-      return {
-        __name: name,
-        value: obj,
-      };
+    name,
+    __brand: "subject",
+    instance,
+    wrap(obj: TData): Subject<TData> {
+      return makeSubject(name, obj);
     },
   };
+}
+
+/** Creates a bare Subject for `name` - no wrapped instance until `.wrap(obj)` is called. */
+export function createSubject<TData = unknown>(name: string): Subject<TData> {
+  return makeSubject<TData>(name);
 }

@@ -3,7 +3,7 @@ import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
 import { Policy, PolicyDefinition } from "../../src";
-import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
+import { listYamlFiles, actionArgFor, subjectArgFor, isIncluded } from "./complianceFixtures";
 
 /**
  * Reads the v1 conformance suite under test/fixtures/v1 (see the README
@@ -93,7 +93,7 @@ describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) 
       }));
 
       test.each(cases)("$name", (testCase) => {
-        expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected === "allow");
+        expect(policy.can(actionArgFor(testCase), subjectArgFor(testCase))).toBe(testCase.expected === "allow");
       });
     });
   });

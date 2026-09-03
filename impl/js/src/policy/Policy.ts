@@ -1,10 +1,10 @@
 import * as semver from "semver";
 import {Action} from "../action";
-import {Subject, SubjectDef, SubjectRef} from "../subject";
+import {Subject} from "../subject";
 import {Condition, ConditionResolver} from "../conditions";
 import {PolicyError, PolicyLoadException, PolicyVersionException} from "../errors";
 import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
-import {DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf} from "./wildcards";
+import {DISABLED, effectiveAnyAction, effectiveAnySubject} from "./wildcards";
 import {Operator} from "../conditions/operators/operator";
 import {DefaultOperators} from "../conditions/operators/defaultOperators";
 
@@ -47,11 +47,11 @@ export class Policy<
   TActions extends Action = Action,
   TSubjects extends Subject = Subject
 > {
-  private readonly definition: PolicyDefinition<TActions, TSubjects>;
+  private readonly definition: PolicyDefinition;
   private readonly resolver: ConditionResolver;
 
   constructor(
-    definition: PolicyDefinition<TActions, TSubjects>,
+    definition: PolicyDefinition,
     operators: Operator[] = []
   ) {
     Policy.validateVersion(definition.version);
@@ -71,7 +71,7 @@ export class Policy<
     TActions extends Action = Action,
     TSubjects extends Subject = Subject
   >(
-    definition: PolicyDefinition<TActions, TSubjects>,
+    definition: PolicyDefinition,
     operators: Operator[] = []
   ): Policy<TActions, TSubjects> {
     return new Policy(definition, operators);
@@ -82,7 +82,7 @@ export class Policy<
     TActions extends Action = Action,
     TSubjects extends Subject = Subject
   >(
-    definition: PolicyDefinition<TActions, TSubjects>,
+    definition: PolicyDefinition,
     operators: Operator[] = []
   ): Policy<TActions, TSubjects> {
     return Policy.from(definition, operators);
@@ -100,23 +100,23 @@ export class Policy<
     }
   }
 
-  private static validateRules(definition: PolicyDefinition<any, any>): void {
+  private static validateRules(definition: PolicyDefinition): void {
     const meta = definition.meta;
     const anyAction = effectiveAnyAction(meta);
     const anySubject = effectiveAnySubject(meta);
 
-    const actionsCatalog = meta?.actions ? new Set(meta.actions.map((a) => String(a))) : undefined;
-    const subjectsCatalog = meta?.subjects ? new Set(meta.subjects.map((s) => subjectNameOf(s))) : undefined;
+    const actionsCatalog = meta?.actions ? new Set(meta.actions) : undefined;
+    const subjectsCatalog = meta?.subjects ? new Set(meta.subjects) : undefined;
     const customOpCatalog = meta?.customOperators ? new Set(meta.customOperators) : undefined;
 
-    for (const rule of definition.rules as RuleTuple<any, any>[]) {
+    for (const rule of definition.rules as RuleTuple[]) {
       if (!Array.isArray(rule) || rule.length < 3) {
         throw new PolicyLoadException(
           `Malformed rule tuple (fewer than 3 elements): ${JSON.stringify(rule)} (SPEC_V1-0-0.md §3.3, EC-10).`
         );
       }
 
-      const [effect, action, subject, conditions] = rule;
+      const [effect, action, subjectName, conditions] = rule;
 
       if (effect !== "allow" && effect !== "deny") {
         throw new PolicyLoadException(
@@ -128,13 +128,9 @@ export class Policy<
           `Malformed rule tuple: action must be a string, got ${JSON.stringify(action)} (SPEC_V1-0-0.md §3.3, EC-10).`
         );
       }
-
-      let subjectName: string;
-      try {
-        subjectName = subjectNameOf(subject);
-      } catch {
+      if (typeof subjectName !== "string") {
         throw new PolicyLoadException(
-          `Malformed rule tuple: subject is not a valid subject, got ${JSON.stringify(subject)} (SPEC_V1-0-0.md §3.3, EC-10).`
+          `Malformed rule tuple: subject must be a string, got ${JSON.stringify(subjectName)} (SPEC_V1-0-0.md §3.3, EC-10).`
         );
       }
 
@@ -173,33 +169,31 @@ export class Policy<
   }
 
   /** Returns the PolicyDefinition backing this policy. */
-  toDefinition(): PolicyDefinition<TActions, TSubjects> {
+  toDefinition(): PolicyDefinition {
     return this.definition;
   }
 
   /** Alias of {@link toDefinition}. */
-  toDto(): PolicyDefinition<TActions, TSubjects> {
+  toDto(): PolicyDefinition {
     return this.toDefinition();
   }
 
   /** Alias of {@link toDefinition}. */
-  def(): PolicyDefinition<TActions, TSubjects> {
+  def(): PolicyDefinition {
     return this.toDefinition();
   }
 
-  can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
+  can(action: TActions, subject: TSubjects): boolean {
     return this.checkPermission(action, subject);
   }
 
-  cannot(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
+  cannot(action: TActions, subject: TSubjects): boolean {
     return !this.can(action, subject);
   }
 
-  require(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): void {
+  require(action: TActions, subject: TSubjects): void {
     if (!this.can(action, subject)) {
-      throw new PolicyError(
-        `Access denied: cannot ${action} on ${typeof subject === "string" ? subject : JSON.stringify(subject)}`
-      );
+      throw new PolicyError(`Access denied: cannot ${action.name} on ${subject.name}`);
     }
   }
 
@@ -211,27 +205,23 @@ export class Policy<
    * rules: exactly one rule decides the outcome, or none does and the
    * result is default deny.
    */
-  private checkPermission(
-    action: TActions,
-    subject: TSubjects | SubjectDef | SubjectRef | string
-  ): boolean {
+  private checkPermission(action: TActions, subject: TSubjects): boolean {
     const meta = this.definition.meta;
     const anyAction = effectiveAnyAction(meta);
     const anySubject = effectiveAnySubject(meta);
-    const subjectName = this.getSubjectName(subject);
     const rules = this.definition.rules;
 
     for (let i = rules.length - 1; i >= 0; i--) {
       const [effect, ruleAction, ruleSubject, ruleConditions] = rules[i];
 
       if (!this.matchesAction(action, ruleAction, anyAction)) continue;
-      if (!this.matchesSubject(subjectName, ruleSubject, anySubject)) continue;
+      if (!this.matchesSubject(subject, ruleSubject, anySubject)) continue;
 
       if (ruleConditions) {
         // A conditional rule can never be satisfied by a bare-type/no-instance
         // check - there's no instance data for the condition to inspect (EC-7).
-        if (!this.hasInstance(subject)) continue;
-        if (!this.resolver.evaluate(this.getSubjectValue(subject), ruleConditions)) continue;
+        if (subject.instance === undefined) continue;
+        if (!this.resolver.evaluate(subject.instance, ruleConditions)) continue;
         return effect === "allow";
       }
 
@@ -241,46 +231,11 @@ export class Policy<
     return false; // EC-1, EC-2: default deny.
   }
 
-  private matchesAction(action: TActions, ruleAction: TActions | string, anyAction: string | typeof DISABLED): boolean {
-    return action === ruleAction || (anyAction !== DISABLED && ruleAction === anyAction);
+  private matchesAction(action: TActions, ruleAction: string, anyAction: string | typeof DISABLED): boolean {
+    return action.name === ruleAction || (anyAction !== DISABLED && ruleAction === anyAction);
   }
 
-  private matchesSubject(
-    subjectName: string,
-    ruleSubject: TSubjects | SubjectDef | string,
-    anySubject: string | typeof DISABLED
-  ): boolean {
-    const ruleSubjectName = subjectNameOf(ruleSubject);
-    return subjectName === ruleSubjectName || (anySubject !== DISABLED && ruleSubjectName === anySubject);
-  }
-
-  private getSubjectName(subject: TSubjects | SubjectDef | SubjectRef | string): string {
-    return subjectNameOf(subject);
-  }
-
-  /**
-   * True when `subject` carries an instance value a Conditions element can
-   * be evaluated against (a `SubjectRef`, or a plain data object) - false
-   * for a bare string or a `SubjectDef` type token, neither of which has
-   * instance data (§5, EC-7, EC-9).
-   */
-  private hasInstance(subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    if (typeof subject === "string") return false;
-    if (subject && typeof (subject as any).wrap === "function") return false; // a bare SubjectDef
-    return true;
-  }
-
-  /**
-   * The subject value conditions are evaluated against. EC-9: a bare
-   * `SubjectDef` MUST NOT expose fields that make ordinary domain
-   * conditions accidentally match - `hasInstance` above already keeps
-   * every conditional rule from reaching this method for one, so this
-   * path only ever runs for a `SubjectRef` or an already-flat instance
-   * value.
-   */
-  private getSubjectValue(subject: TSubjects | SubjectDef | SubjectRef | string): any {
-    if (typeof subject === "string") return subject;
-    if ("value" in subject && (subject as any).value !== undefined) return (subject as any).value;
-    return subject;
+  private matchesSubject(subject: TSubjects, ruleSubject: string, anySubject: string | typeof DISABLED): boolean {
+    return subject.name === ruleSubject || (anySubject !== DISABLED && ruleSubject === anySubject);
   }
 }

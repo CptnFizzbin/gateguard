@@ -1,6 +1,11 @@
 import { describe, test, expect } from "vitest";
 import { Policy } from "./Policy";
+import { createAction } from "../action";
+import { createSubject } from "../subject";
 import { PolicyLoadException, PolicyVersionException } from "../errors";
+
+const Delete = createAction("Delete");
+const Read = createAction("Read");
 
 describe("Policy: last-rule-wins evaluation (SPEC_V1-0-0.md §6)", () => {
   test("a later-declared deny rule overrides an earlier allow for the same action/subject", () => {
@@ -12,8 +17,10 @@ describe("Policy: last-rule-wins evaluation (SPEC_V1-0-0.md §6)", () => {
       ],
     });
 
-    expect(policy.can("Delete", "Article")).toBe(false);
-    expect(policy.cannot("Delete", "Article")).toBe(true);
+    const article = createSubject("Article");
+
+    expect(policy.can(Delete, article)).toBe(false);
+    expect(policy.cannot(Delete, article)).toBe(true);
   });
 
   test("a conditional deny rule only overrides allow when its condition matches", () => {
@@ -25,11 +32,12 @@ describe("Policy: last-rule-wins evaluation (SPEC_V1-0-0.md §6)", () => {
       ],
     });
 
-    const archived = { __name: "Article", status: "archived" };
-    const published = { __name: "Article", status: "published" };
+    const article = createSubject<{ status: string }>("Article");
+    const archived = article.wrap({ status: "archived" });
+    const published = article.wrap({ status: "published" });
 
-    expect(policy.can("Delete", archived)).toBe(false);
-    expect(policy.can("Delete", published)).toBe(true);
+    expect(policy.can(Delete, archived)).toBe(false);
+    expect(policy.can(Delete, published)).toBe(true);
   });
 
   test("a later allow reopens what an earlier deny closed", () => {
@@ -41,13 +49,13 @@ describe("Policy: last-rule-wins evaluation (SPEC_V1-0-0.md §6)", () => {
       ],
     });
 
-    expect(policy.can("Delete", "User")).toBe(true);
+    expect(policy.can(Delete, createSubject("User"))).toBe(true);
   });
 
   test("an empty rule list denies everything (EC-1)", () => {
     const policy = Policy.from({ version: "1.0.0", rules: [] });
 
-    expect(policy.can("Read", "Article")).toBe(false);
+    expect(policy.can(Read, createSubject("Article"))).toBe(false);
   });
 });
 
