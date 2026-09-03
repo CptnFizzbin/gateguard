@@ -1,4 +1,4 @@
-# KeyCard - Java
+# GateGuard - Java
 
 Java access control library inspired by CASL.js. Provides type-safe, composable authorization policies.
 
@@ -17,7 +17,7 @@ Add to your `pom.xml`:
 ```xml
 <dependency>
     <groupId>com.cptnfizzbin</groupId>
-    <artifactId>keycard</artifactId>
+    <artifactId>gateguard</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
@@ -25,13 +25,13 @@ Add to your `pom.xml`:
 Or with Gradle:
 
 ```gradle
-implementation 'com.cptnfizzbin:keycard:0.1.0'
+implementation 'com.cptnfizzbin:gateguard:0.1.0'
 ```
 
 ## Quick Start
 
 ```java
-import com.cptnfizzbin.keycard.*;
+import com.cptnfizzbin.gateguard.*;
 import java.util.Map;
 
 class Article {
@@ -248,7 +248,7 @@ mvn test
 
 Run the example:
 ```bash
-mvn exec:java -Dexec.mainClass="com.cptnfizzbin.keycard.Example"
+mvn exec:java -Dexec.mainClass="com.cptnfizzbin.gateguard.Example"
 ```
 
 ## See Also
