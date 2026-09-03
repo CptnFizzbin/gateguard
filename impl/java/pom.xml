@@ -5,13 +5,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.cptnfizzbin</groupId>
-    <artifactId>keycard</artifactId>
+    <artifactId>gateguard</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>KeyCard</name>
+    <name>GateGuard</name>
     <description>Type-safe authorization library for Java</description>
-    <url>https://github.com/cptnfizzbin/keycard</url>
+    <url>https://github.com/cptnfizzbin/gateguard</url>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -35,7 +35,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- YAML is only ever parsed by tests (fixture loaders) - KeyCard
+        <!-- YAML is only ever parsed by tests (fixture loaders) - GateGuard
              itself never reads or writes policy.yaml text. -->
         <dependency>
             <groupId>org.yaml</groupId>
