@@ -534,19 +534,17 @@ nothing following it **MUST** be ignored.
 **Requirements:**
 
 - After escape resolution, `pattern` **MUST** be interpreted as a sequence of
-  literal segments separated by `*`/`**` wildcards, optionally anchored at the
+  literal segments separated by `*` wildcards, optionally anchored at the
   start (leading unescaped `^`) and/or the end (trailing unescaped
   `$`). `subject` (coerced via `String(subject)`) matches when it can be
-  decomposed into those literal segments, each separated by a run of one or more
-  characters wherever a `*`/`**` sits between them, with the segment before an
+  decomposed into those literal segments, each separated by a run of zero or
+  more characters wherever a `*` sits between them, with the segment before an
   anchor required to touch that boundary exactly.
 - Because `$substr` produces only a boolean result — v1 has no
-  capture/extraction feature — the lazy (`*`) vs. greedy (`**`) distinction MUST
-  NOT affect whether a given subject matches: both require one or more
-  characters to fill their gap, and any valid decomposition is as good as any
-  other for a yes/no answer. Implementations **MAY** implement
+  capture/extraction feature — a run of consecutive `*` tokens (e.g. `**`) is
+  match-equivalent to a single `*`. Implementations **MAY** implement
   `$substr` however they like internally (including compiling it to the host
-  language's native regex engine, e.g. translating `*`/`**` to `.+`
+  language's native regex engine, e.g. translating `*` to `.*`
   and escaping literal segments) as long as the observable match/no-match result
   matches this specification for every subject and pattern — validate against
   the shared conformance suite (§6) if in doubt.
