@@ -9,8 +9,8 @@ export type {Subject, SubjectDef, SubjectRef, InferSubjects} from "./subject";
 export {createSubject} from "./subject";
 
 // Conditions
-export type {Condition, CustomConditionChecker} from "./conditions";
-export {ConditionResolver} from "./conditions";
+export type {Condition, Operator, OperatorContext} from "./conditions";
+export {ConditionResolver, createOperator} from "./conditions";
 
 // Policy
 export type {Rule, RuleTuple, Meta, Effect, PolicyDefinition} from "./policy";

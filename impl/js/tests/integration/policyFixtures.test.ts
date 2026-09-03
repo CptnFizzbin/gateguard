@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
-import { Policy, PolicyDefinition, CustomConditionChecker } from "../../src";
+import { createOperator, Operator, Policy, PolicyDefinition } from "../../src";
 import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
 
 /**
@@ -27,10 +27,10 @@ const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/policies");
  * suite) can implement; declaring it in meta.customOperators documents it
  * but doesn't wire up behavior. Keyed by fixture file name.
  */
-const CUSTOM_CHECKERS: Record<string, CustomConditionChecker> = {
-  "policy-05-advanced.yaml": {
-    $startsWithUpper: (subject: unknown) => typeof subject === "string" && /^[A-Z]/.test(subject),
-  },
+const CUSTOM_CHECKERS: Record<string, Operator[]> = {
+  "policy-05-advanced.yaml": [
+    createOperator("$startsWithUpper", (subject) => typeof subject === "string" && /^[A-Z]/.test(subject)),
+  ],
 };
 
 interface TestCase {

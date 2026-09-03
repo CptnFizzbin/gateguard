@@ -6,6 +6,7 @@ import {PolicyError, PolicyLoadException, PolicyVersionException} from "../error
 import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
 import {DISABLED, effectiveAnyAction, effectiveAnySubject, subjectNameOf} from "./wildcards";
 import {Operator} from "../conditions/operators/operator";
+import {DefaultOperators} from "../conditions/operators/defaultOperators";
 
 /** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. */
 const SUPPORTED_VERSION = "1.0.0";
@@ -13,6 +14,9 @@ const SUPPORTED_MAJOR = semver.major(SUPPORTED_VERSION);
 const SUPPORTED_MINOR = semver.minor(SUPPORTED_VERSION);
 /** Same MAJOR as SUPPORTED_VERSION, MINOR no higher - PATCH is irrelevant either way (§2). */
 const COMPATIBLE_RANGE = `>=${SUPPORTED_MAJOR}.0.0 <${SUPPORTED_MAJOR}.${SUPPORTED_MINOR + 1}.0`;
+
+/** Every operator {@link ConditionResolver} understands natively, by name - anything else is a custom operator. */
+const BUILTIN_OPERATOR_NAMES = new Set<string>(DefaultOperators.map((op) => op.name));
 
 /**
  * Recursively collects every non-built-in, `$`-prefixed operator name used
@@ -30,6 +34,8 @@ function collectCustomOperators(condition: Condition | undefined, out: Set<strin
         collectCustomOperators(value, out);
       } else if (key === "$field" && Array.isArray(value) && value.length === 2) {
         collectCustomOperators(value[1], out);
+      } else if (!BUILTIN_OPERATOR_NAMES.has(key)) {
+        out.add(key);
       }
     } else {
       collectCustomOperators(value, out);
@@ -69,6 +75,17 @@ export class Policy<
     operators: Operator[] = []
   ): Policy<TActions, TSubjects> {
     return new Policy(definition, operators);
+  }
+
+  /** Alias of {@link from}. */
+  static fromDto<
+    TActions extends Action = Action,
+    TSubjects extends Subject = Subject
+  >(
+    definition: PolicyDefinition<TActions, TSubjects>,
+    operators: Operator[] = []
+  ): Policy<TActions, TSubjects> {
+    return Policy.from(definition, operators);
   }
 
   private static validateVersion(version: string): void {
@@ -160,6 +177,16 @@ export class Policy<
     return this.definition;
   }
 
+  /** Alias of {@link toDefinition}. */
+  toDto(): PolicyDefinition<TActions, TSubjects> {
+    return this.toDefinition();
+  }
+
+  /** Alias of {@link toDefinition}. */
+  def(): PolicyDefinition<TActions, TSubjects> {
+    return this.toDefinition();
+  }
+
   can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
     return this.checkPermission(action, subject);
   }
@@ -182,7 +209,7 @@ export class Policy<
    * and (if present) conditions all match. There is no independent
    * "allow AND NOT deny" veto and no combination of multiple matching
    * rules: exactly one rule decides the outcome, or none does and the
-   * result is operators deny.
+   * result is default deny.
    */
   private checkPermission(
     action: TActions,
@@ -211,7 +238,7 @@ export class Policy<
       return effect === "allow";
     }
 
-    return false; // EC-1, EC-2: operators deny.
+    return false; // EC-1, EC-2: default deny.
   }
 
   private matchesAction(action: TActions, ruleAction: TActions | string, anyAction: string | typeof DISABLED): boolean {

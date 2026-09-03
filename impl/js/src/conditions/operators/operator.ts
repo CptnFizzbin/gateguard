@@ -2,8 +2,6 @@ import {JsonValue} from "../../lib/json";
 import {PolicyTypeMismatchError} from "../../errors/PolicyTypeMismatchError";
 import {getLogger} from "../../lib/logger";
 
-const logger = getLogger()
-
 export interface OperatorContext {
   resolveSubcondition: (subject: unknown, condition: JsonValue) => boolean
 }
@@ -25,7 +23,11 @@ export function createOperator(
         return resolver(subject, value, ctx)
       } catch (e) {
         if (e instanceof PolicyTypeMismatchError) {
-          logger.warn(`[Keycard] ${e.message}`)
+          // §7.1: "type issues are diagnosed, not silenced" - call
+          // getLogger() fresh rather than caching it at module load, so
+          // a consumer's setLogger() (almost always called after this
+          // module has already been imported) still takes effect.
+          getLogger().warn(e.message)
           return false
         }
 

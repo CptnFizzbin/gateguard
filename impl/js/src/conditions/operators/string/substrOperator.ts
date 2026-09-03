@@ -1,6 +1,15 @@
 import {createOperator} from "../operator";
 import {PolicyTypeMismatchError} from "../../../errors/PolicyTypeMismatchError";
+import {escapeRegExp} from "../../../lib/regex";
 
+/**
+ * §7.4.6: `$substr` - a small, deliberately non-regex substring pattern
+ * language, compiled here to a native `RegExp` (the spec explicitly
+ * permits this: implementations MAY implement `$substr` however they
+ * like internally, including compiling it to the host language's regex
+ * engine, as long as the observable match/no-match result agrees with
+ * the spec for every subject/pattern).
+ */
 export const SubstrOperator = createOperator("$substr", (subject, pattern) => {
   if (subject === null || subject === undefined) return false
 
@@ -22,21 +31,35 @@ export const SubstrOperator = createOperator("$substr", (subject, pattern) => {
       case "\\":
         if (!next) break
 
-        regexPattern += RegExp.escape(next)
+        regexPattern += escapeRegExp(next)
         i++ // skip next
 
         break
       case "*":
         regexPattern += ".*"
         break
-      case "$":
       case "^":
-        regexPattern += char
+        // Only meaningful as the pattern's first character - anywhere
+        // else it's a structurally invalid pattern (§7.4.6).
+        if (i !== 0) throw new PolicyTypeMismatchError({
+          value: {expected: "'^' only as the first character", received: `'^' at position ${i}`}
+        })
+        regexPattern += "^"
+        break
+      case "$":
+        // Only meaningful as the pattern's last character.
+        if (i !== pattern.length - 1) throw new PolicyTypeMismatchError({
+          value: {expected: "'$' only as the last character", received: `'$' at position ${i}`}
+        })
+        regexPattern += "$"
         break
       default:
-        regexPattern += RegExp.escape(char)
+        regexPattern += escapeRegExp(char)
     }
   }
 
-  return !!(new RegExp(regexPattern).exec(subjectStr))
+  // The "s" flag makes "." match newlines too, so a wildcard is truly
+  // "any character", per the requirement that lazy/greedy wildcards be
+  // match-equivalent (both just need one gap-filling run of characters).
+  return !!(new RegExp(regexPattern, "s").exec(subjectStr))
 })

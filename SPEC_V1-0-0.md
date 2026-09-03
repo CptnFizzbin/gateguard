@@ -293,7 +293,7 @@ function can (action, subject) {
     return effect == 'allow'
   }
 
-  return false // nothing matched: operators deny
+  return false // nothing matched: default deny
 }
 
 function matchesAction (action, ruleAction) {
@@ -304,7 +304,7 @@ function matchesSubject (name, ruleSubject) {
   return name == ruleSubject || ruleSubject == effectiveAnySubject(meta)
 }
 
-// meta.anyAction/meta.anySubject: absent -> "_ANY_" operators;
+// meta.anyAction/meta.anySubject: absent -> "_ANY_" default;
 // an explicit string -> that string; explicit null -> DISABLED (a
 // sentinel no rule's Action/Subject can ever equal, so the wildcard
 // branch of matchesAction/matchesSubject above never succeeds).
