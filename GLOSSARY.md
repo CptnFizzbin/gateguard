@@ -1,6 +1,6 @@
 # Glossary
 
-Term definitions for KeyCard. See [`SPEC.md`](SPEC.md) for the informal
+Term definitions for GateGuard. See [`SPEC.md`](SPEC.md) for the informal
 overview and [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md) for the normative v1
 specification.
 
