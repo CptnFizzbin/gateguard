@@ -22,6 +22,6 @@ export {PolicyBuilder} from "./builder";
 // Errors
 export {PolicyError, PolicyLoadException, PolicyVersionException, PolicyArgumentError} from "./errors";
 
-export const KeycardConfig = {
+export const GateGuardConfig = {
   setLogger: setLogger
 }

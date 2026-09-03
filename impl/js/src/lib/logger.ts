@@ -15,8 +15,8 @@ let _logger: Logger = {
 
 export function setLogger(logger: Logger) {
   _logger = {
-    info: (msg) => logger.info(`[KeyCard] ${msg}`),
-    warn: (msg) => logger.warn(`[KeyCard] ${msg}`),
+    info: (msg) => logger.info(`[GateGuard] ${msg}`),
+    warn: (msg) => logger.warn(`[GateGuard] ${msg}`),
     error: (err) => logger.error(err),
   }
 }

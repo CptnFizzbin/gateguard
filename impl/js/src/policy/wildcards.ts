@@ -7,7 +7,7 @@ import type { Meta } from "./PolicyDefinition";
  * sentinel, so the wildcard branch of `matchesAction`/`matchesSubject`
  * never succeeds for that position (SPEC_V1-0-0.md §3.2.1, §4, §5, §6).
  */
-export const DISABLED: unique symbol = Symbol("keycard:wildcard-disabled");
+export const DISABLED: unique symbol = Symbol("gateguard:wildcard-disabled");
 
 const DEFAULT_WILDCARD = "_ANY_";
 
