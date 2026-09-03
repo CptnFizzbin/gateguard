@@ -103,11 +103,11 @@ describe("Policy: construction-time validation", () => {
     ).toThrow(PolicyLoadException);
   });
 
-  test("throws PolicyLoadException when a rule uses a custom operator outside a declared meta.customOperators catalog (EC-13)", () => {
+  test("throws PolicyLoadException when a rule uses a custom operator outside a declared meta.operators catalog (EC-13)", () => {
     expect(() =>
       Policy.from({
         version: "1.0.0",
-        meta: { customOperators: ["$hasRole"] },
+        meta: { operators: ["$hasRole"] },
         rules: [["allow", "Read", "Article", { $isAdmin: true }]],
       })
     ).toThrow(PolicyLoadException);

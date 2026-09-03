@@ -37,7 +37,7 @@ function wildcardNameOf(value: Action | Subject | string | null | undefined): st
 
 /**
  * Builds a {@link PolicyDefinition} rule by rule. `meta.actions`/
- * `meta.subjects`/`meta.customOperators` are never supplied directly -
+ * `meta.subjects`/`meta.operators` are never supplied directly -
  * {@link buildDef} fills them in automatically from what {@link allow}/
  * {@link deny} actually used and what `operators` actually registered, so
  * there's no separately hand-maintained catalog to keep in sync by hand.
@@ -79,7 +79,7 @@ export class PolicyBuilder<
     };
   }
 
-  /** §3.2.2/§3.2.3: derives `actions`/`subjects`/`customOperators` from what was actually used/registered - see the class doc. */
+  /** §3.2.2/§3.2.3: derives `actions`/`subjects`/`operators` from what was actually used/registered - see the class doc. */
   private buildMeta(): Meta {
     const meta: Meta = {
       actions: Array.from(this.actionsUsed),
@@ -87,7 +87,7 @@ export class PolicyBuilder<
     };
     if (this.anyAction !== undefined) meta.anyAction = this.anyAction;
     if (this.anySubject !== undefined) meta.anySubject = this.anySubject;
-    if (this.operators.length > 0) meta.customOperators = this.operators.map((op) => op.name);
+    if (this.operators.length > 0) meta.operators = this.operators.map((op) => op.name);
     return meta;
   }
 

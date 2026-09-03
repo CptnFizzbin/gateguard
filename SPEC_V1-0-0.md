@@ -112,7 +112,7 @@ meta: # optional
   anySubject: string | null         # optional, defaults to "_ANY_" — see §5
   actions: string[]                 # optional catalog — see §4
   subjects: string[]                # optional catalog — see §5
-  customOperators: string[]         # optional catalog — see §7.4.12
+  operators: string[]                # optional catalog — see §7.4.12
   application: any                  # optional, opaque application data — see §3.2.4
 
 rules:
@@ -138,9 +138,19 @@ following fields are **OPTIONAL** as well.
 The wildcard tokens (§4, §5) for the policy. Implementations **MUST** default to
 the literal string `"_ANY_"` when not declared. A policy **MAY** override either
 to a different string, and **MAY** declare one without the other. Either **MAY**
-instead be explicitly set to `null` to disable the wildcard mechanism for that
-position entirely. When null every rule's `Action` or `Subject` **MUST** be
-tested literally, including the default wildcard string `"_ANY_"`.
+instead be explicitly set to `null` **or** `false` to disable the wildcard
+mechanism for that position entirely - the two are equivalent. When disabled,
+every rule's `Action` or `Subject` **MUST** be tested literally, including the
+default wildcard string `"_ANY_"`.
+
+A declared value that is neither a string, `null`, nor `false` (e.g. `true`, a
+number, a list) is invalid. Implementations **MUST** throw a
+`PolicyLoadException` immediately upon encountering one, rather than silently
+coercing it or passing it through as a raw value to be compared against later.
+This four-way dispatch - absent (defaults to `"_ANY_"`), `null`/`false`
+(disabled), a string (that token), anything else (throw) - applies wherever a
+declared `anyAction`/`anySubject` value is resolved, not merely at the point
+`meta` is first parsed.
 
 #### 3.2.2 `meta.actions` / `meta.subjects`
 
@@ -165,26 +175,39 @@ Implementations **MAY** trim a declared catalog down to only the subset of names
 a policy's rules actually use (e.g. when a tool regenerates or re-serializes a
 `PolicyDefinition`).
 
-#### 3.2.3 `meta.customOperators`
+#### 3.2.3 `meta.operators`
 
 A declarative catalog of the custom `$`-prefixed condition operator names (e. g.
 `"$hasRole"`) this policy's rules use, enforced the same way as `meta.actions`/
-`meta.subjects` above when declared. Declaring an operator here does not
-implement it. `PolicyDefinition` is JSON encodeable and cannot carry an
-executable checker.
+`meta.subjects` above when declared: a rule referencing a `$op` not listed here
+**MUST** throw a `PolicyLoadException` at construction (§7.4.12, EC-13).
+Declaring an operator here does not implement it - `PolicyDefinition` is JSON
+encodeable and cannot carry an executable checker.
 
 The operator's behavior must be supplied separately by the host application,
-through whatever runtime custom-condition-registration mechanism the
-implementation exposes (e.g. the JS `CustomConditionChecker` map passed to
-`Policy.from`). See §7.4.12, EC-13, EC-15. During construction, implementations
-**MUST** throw a `PolicyLoadException` if a behavior is not provided to the
-constructor.
+through whatever runtime operator-registration mechanism the implementation
+exposes alongside the built-ins (§7.4). Beyond EC-13's coverage check,
+`meta.operators` carries a second, stronger requirement: for every name it
+lists, an operator (built-in or custom) **MUST** actually be registered on the
+`Policy`/`ConditionResolver` instance being constructed. Implementations
+**MUST** throw a `PolicyLoadException` at construction time if some declared
+name has nothing registered for it - checked in full immediately, regardless
+of whether any rule actually reaches that name during evaluation. See §7.4.12,
+EC-13, EC-15.
 
-A policy **SHOULD** include `meta.customOperators` whenever any rule uses a
-custom operator — unlike `meta.actions`/`meta.subjects`, this catalog is the
-only place a reader can discover which external checkers the host application
+A policy **SHOULD** include `meta.operators` whenever any rule uses a custom
+operator — unlike `meta.actions`/`meta.subjects`, this catalog is the only
+place a reader can discover which external checkers the host application
 needs to register, so declaring it matters more here than for the other two
 catalogs.
+
+An operator's `$name` **MUST** be unique among the full set an implementation
+registers for one `Policy`/`ConditionResolver` instance - the built-ins (§7.4.1
+-§7.4.11) plus whatever custom operators the host application supplies.
+Constructing an instance where a custom operator's name collides with a
+built-in, or with another custom operator in the same input, **MUST** throw a
+`PolicyLoadException` immediately; implementations **MUST NOT** silently let
+the later one shadow the earlier. See EC-16.
 
 #### 3.2.4 `meta.application`
 
@@ -195,7 +218,7 @@ application (e.g. via `def()`/`toDefinition()`), but **MUST NOT** raise an
 error or otherwise reject a definition merely because `meta.application` is
 present, regardless of its shape or contents. It is exempt from every other
 `meta` field's rules in this section — unlike `meta.actions`/
-`meta.subjects`/`meta.customOperators`, it is never validated, enforced, or
+`meta.subjects`/`meta.operators`, it is never validated, enforced, or
 cross-checked against `rules`.
 
 ### 3.3 rules
@@ -304,18 +327,23 @@ function matchesSubject (name, ruleSubject) {
   return name == ruleSubject || ruleSubject == effectiveAnySubject(meta)
 }
 
-// meta.anyAction/meta.anySubject: absent -> "_ANY_" default;
-// an explicit string -> that string; explicit null -> DISABLED (a
-// sentinel no rule's Action/Subject can ever equal, so the wildcard
-// branch of matchesAction/matchesSubject above never succeeds).
+// meta.anyAction/meta.anySubject: absent -> "_ANY_" default; an explicit
+// string -> that string; explicit null or false -> DISABLED (a sentinel no
+// rule's Action/Subject can ever equal, so the wildcard branch of
+// matchesAction/matchesSubject above never succeeds); anything else -> throw.
 function effectiveAnyAction (meta) {
-  if (meta?.anyAction === null) return DISABLED
-  return meta?.anyAction ?? '_ANY_'
+  return resolveWildcard(meta?.anyAction)
 }
 
 function effectiveAnySubject (meta) {
-  if (meta?.anySubject === null) return DISABLED
-  return meta?.anySubject ?? '_ANY_'
+  return resolveWildcard(meta?.anySubject)
+}
+
+function resolveWildcard (declared) {
+  if (declared === undefined) return '_ANY_'
+  if (declared === null || declared === false) return DISABLED
+  if (typeof declared === 'string') return declared
+  throw new PolicyLoadException('...') // anything else is invalid (§3.2.1)
 }
 ```
 
@@ -646,31 +674,37 @@ of as the object key.
 #### 7.4.12 Custom operators (`$op`)
 
 `{ $op: value }`, where `$op` is neither a built-in operator (§7.4.1– §7.4.11)
-nor `$field`. Delegates to a checker function
-`(subject, value) => boolean` registered on the `Policy`/
-`ConditionResolver` instance at construction time, via whatever registration
-mechanism the implementation exposes.
+nor `$field`. Delegates to an operator implementation registered on the
+`Policy`/`ConditionResolver` instance at construction time, via whatever
+registration mechanism the implementation exposes. A custom operator receives
+the same `(subject, value)` pair a built-in does, plus a resolution context
+exposing something equivalent to `resolveSubcondition(subject, condition)` —
+this is what lets a custom operator recurse into the condition language (e.g.
+implementing its own `$and`-like combinator) exactly the way the built-in
+`$and`/`$or`/`$not` do.
 
 **Requirements:**
 
-- An unregistered `$op` (no checker registered for it on this instance)
+- An unregistered `$op` (no operator registered for it on this instance)
   MUST evaluate to `false`. It **MUST NOT** be treated as a field name (field
   names **MUST NOT** start with `$` — see §7.4.11, §7.5) and **MUST NOT** be
   silently ignored as a no-op `true`.
-- When `meta.customOperators` either isn't declared or doesn't list
+- When `meta.operators` either isn't declared or doesn't list
   `$op`, an unregistered `$op` is not itself a type issue (§7.1) — an
   unrecognized operator name is a different mistake than a recognized operator
   given the wrong operand type — so it **MUST NOT** require the console
   diagnostic, though an implementation **MAY** still choose to log one (as a
   nicety, not a requirement) to make a typo like `$eqq` easier to notice. See
   EC-13.
-- When `$op` *is* listed in `meta.customOperators` (so `Policy.from(...)`
-  already validated that every rule using it references a cataloged name — §3),
-  but no checker was ever registered for it at runtime and some rule reaches it
-  during evaluation: this **MUST** produce the §7.1 console diagnostic, distinct
-  from the general case above — a declared-but-unfulfilled operator is a
-  genuine, worth-surfacing configuration bug (the document promised `$op` would
-  be meaningful; the application wiring didn't keep that promise). See EC-15.
+- When `$op` *is* listed in `meta.operators`, `Policy.from(...)` already
+  validated - at construction, before any rule is ever evaluated - both that
+  every rule using it references a cataloged name (§3, EC-13) *and* that an
+  operator (built-in or custom) is actually registered for `$op` (EC-15). The
+  "cataloged but nothing registered" case this bullet previously described as
+  a runtime diagnostic therefore **cannot** arise during evaluation any
+  longer - it's a construction-time `PolicyLoadException` instead. See EC-15.
+- Registering two operators - built-in and custom, or two custom operators -
+  under the same `$name` on one instance is itself invalid; see EC-16.
 
 ### 7.5 Multi-key condition objects
 
@@ -838,11 +872,11 @@ wildcard. Field names inside conditions are likewise matched exactly as written.
 A `$`-prefixed key that is neither a built-in operator (§7.4.1–§7.4.11)
 nor registered as a custom condition checker on that `Policy`/
 `ConditionResolver` instance evaluates to `false` (§7.4.12) — never a type issue
-on its own, never a no-op `true`. When `meta.customOperators`
+on its own, never a no-op `true`. When `meta.operators`
 is declared, `Policy.from(...)` **MUST** throw a `PolicyLoadException` at
 construction if some rule uses a `$op` not listed there (§3) — the same
 enforcement as EC-8, applied to the custom-operator namespace. A
-`meta.customOperators` entry that no rule uses is never an error.
+`meta.operators` entry that no rule uses is never an error.
 
 ### EC-14 — Reserved wildcard names are policy-scoped
 
@@ -854,24 +888,41 @@ literal action name (and likewise for `anySubject`/subjects). A *different*
 policy that overrides `meta.anyAction` to a different string reserves that
 different string instead, with no conflict, because reservation is scoped to the
 declaring policy. A policy that explicitly sets `meta.anyAction`/
-`meta.anySubject` to `null` (§3) reserves nothing at all for that position —
-every string, including `"_ANY_"`, is then a legal, ordinary literal name there.
+`meta.anySubject` to `null` or `false` (§3.2.1) reserves nothing at all for
+that position — every string, including `"_ANY_"`, is then a legal, ordinary
+literal name there.
 `anyAction` and `anySubject` are independent of each other (one governs the
 `Action` position, the other the `Subject` position) and **MAY** even share the
 same literal string with no conflict, since actions and subjects are never
 compared against each other.
 
-### EC-15 — A cataloged custom operator is never registered
+### EC-15 — A cataloged operator is never registered
 
-When a policy declares `meta.customOperators` including `$op`, but the
-`Policy`/`ConditionResolver` instance evaluating it has no checker actually
-registered for `$op`, and some rule reaches `$op` during evaluation: the
-condition still resolves to `false` (§7.1, §7.4.12), but unlike the general
-"unrecognized operator" case (EC-13), this **MUST** produce the §7.1 console
-diagnostic and **MUST NOT** throw. The document promised `$op` would be
-meaningful; the application wiring didn't keep that promise, which is a genuine,
-worth-surfacing configuration bug — not merely undocumented vocabulary the way
-an uncataloged operator is.
+When a policy declares `meta.operators` including `$op`, but the
+`Policy`/`ConditionResolver` instance being constructed has no operator
+(built-in or custom) actually registered for `$op`, construction **MUST**
+throw a `PolicyLoadException` (§3.2.3) — checked for every name in
+`meta.operators` at construction time, in full, regardless of whether any
+rule actually reaches `$op` during evaluation. The document promised `$op`
+would be meaningful; the application wiring didn't keep that promise, which
+is a genuine, worth-surfacing configuration bug — not merely undocumented
+vocabulary the way an uncataloged operator (EC-13) is. Because this is
+checked eagerly at construction, the previously-possible "cataloged but
+unregistered, and some rule reaches it during evaluation" runtime scenario
+can no longer occur: any `Policy` that successfully constructs already has
+every `meta.operators` name backed by a real registration.
+
+### EC-16 — Duplicate operator names
+
+An implementation registers one merged set of operators per `Policy`/
+`ConditionResolver` instance: the built-ins (§7.4.1–§7.4.11) plus whatever
+custom operators the host application supplies (§7.4.12). If a custom
+operator's `$name` collides with a built-in's, or two custom operators in
+the same input share a `$name`, construction **MUST** throw a
+`PolicyLoadException` immediately (§3.2.3). Implementations **MUST NOT**
+silently let the later-registered operator overwrite/shadow the earlier one
+— a name collision is always a construction-time error, never a
+resolved-by-precedence ambiguity.
 
 ## 9. Prior work
 
@@ -897,7 +948,7 @@ description: "Users can only modify their own articles"
 meta:
   actions: [ Read, Create, Update, Delete ]
   subjects: [ Article ]
-  customOperators: [ $hasRole ]
+  operators: [ $hasRole ]
 
 rules:
   - [ allow, Read, _ANY_ ]
@@ -920,11 +971,12 @@ admin can delete an archived article even though the `deny`
 rule above would otherwise block it — demonstrating last-rule-wins (§6)
 overriding an earlier, more specific-looking rule. `$hasRole` isn't a built-in
 operator (§7.4.12) — it's a custom one this policy declares in
-`meta.customOperators` and expects the host application to have registered a
+`meta.operators` and requires the host application to have registered a
 checker for at `Policy` construction time (e.g. one that checks
 `subject.roles.includes("admin")`); per EC-15, if the application forgot to
-register it, evaluating this rule logs a diagnostic rather than silently letting
-every admin-only check fail closed with no clue why. Note this rule is
+register it, `Policy.from(...)` throws a `PolicyLoadException` immediately,
+rather than silently letting every admin-only check fail closed with no clue
+why once evaluation eventually reached it. Note this rule is
 wildcarded on *neither* side (it names both a concrete action, `Delete`, and a
 concrete subject, `Article`), so it isn't subject to EC-6's
 both-sides-wildcarded restriction regardless.

@@ -36,9 +36,10 @@ public class PolicyFixtureCaseTest {
                 continue;
             }
 
+            String policyName = policyFile.getFileName().toString();
             PolicyDefinition policyDef = PolicyFixtures.loadPolicyDefinition(policyFile);
             for (ComplianceFixtures.TestCase testCase : PolicyFixtures.loadTestCases(testFile)) {
-                params.add(new Object[] { policyFile.getFileName().toString(), testCase.name(), policyDef, testCase });
+                params.add(new Object[] { policyName, testCase.name(), policyDef, testCase });
             }
         }
         return params;
@@ -46,17 +47,19 @@ public class PolicyFixtureCaseTest {
 
     private final PolicyDefinition policyDef;
     private final ComplianceFixtures.TestCase testCase;
+    private final String policyName;
 
     public PolicyFixtureCaseTest(
         String policyName, String caseName, PolicyDefinition policyDef, ComplianceFixtures.TestCase testCase
     ) {
+        this.policyName = policyName;
         this.policyDef = policyDef;
         this.testCase = testCase;
     }
 
     @Test
     public void resolvesExpectedResult() {
-        Policy policy = Policy.from(policyDef);
+        Policy policy = Policy.from(policyDef, PolicyFixtures.operatorsFor(policyName));
 
         assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }

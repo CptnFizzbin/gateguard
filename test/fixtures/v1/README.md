@@ -45,7 +45,7 @@ meta:                      # optional — see SPEC_V1-0-0.md §3.2
   anySubject: ...
   actions: [...]
   subjects: [...]
-  customOperators: [...]
+  operators: [...]
 rules:                     # list of [effect, action, subject, conditions?] tuples
   - [allow, Read, Article]
 cases:
@@ -100,15 +100,19 @@ something newer than a given suite's baked-in ceiling.
 
 This format only expresses *evaluation* outcomes (`can` returning `allow`/
 `deny`), so it covers §4 through §7 and the evaluation-facing edge cases
-(EC-1 through EC-9, EC-12 through EC-15) of the edge-case catalogue in §8.
+(EC-1 through EC-9, EC-12 through EC-14) of the edge-case catalogue in §8.
 It does **not** cover the purely construction-time validation requirements
 (malformed rule tuples — EC-10, `version` incompatibility — EC-11, a
-both-sides-wildcarded rule carrying a `Conditions` element, or
-`meta.actions`/`meta.subjects`/`meta.customOperators` catalog-coverage
-enforcement — EC-8/EC-13's `PolicyLoadException` half), since those are
-expected to *throw* at construction rather than resolve to an `allow`/`deny`
-outcome. Those requirements should be covered separately, e.g. by
-implementation-specific unit tests asserting the right exception type.
+both-sides-wildcarded rule carrying a `Conditions` element,
+`meta.actions`/`meta.subjects`/`meta.operators` catalog-coverage enforcement
+— EC-8/EC-13's `PolicyLoadException` half, a `meta.operators` entry with
+nothing registered for it — EC-15, now a construction-time throw rather
+than a runtime diagnostic, or a duplicate operator name across the
+built-ins and whatever custom operators were supplied — EC-16), since those
+are expected to *throw* at construction rather than resolve to an
+`allow`/`deny` outcome. Those requirements should be covered separately,
+e.g. by implementation-specific unit tests asserting the right exception
+type.
 
 ## Files
 
@@ -128,8 +132,10 @@ implementation-specific unit tests asserting the right exception type.
 - `07-operators-substr.yaml` — `$substr`'s pattern language (§7.4.6).
 - `08-operators-logic.yaml` — `$or`, `$and`, `$not`, and multi-key AND
   (§7.4.7–§7.4.9, §7.5).
-- `09-custom-operators.yaml` — unregistered custom operators always evaluate
-  to `false` (§7.4.12, EC-13, EC-15).
+- `09-custom-operators.yaml` — unregistered, uncataloged custom operators
+  always evaluate to `false` (§7.4.12, EC-13). The cataloged-but-never-
+  registered case (EC-15) is no longer expressible here now that it's a
+  construction-time throw - see the file's own comment.
 - `10-subject-shapes.yaml` — bare type vs. wrapped instance (EC-7, EC-9).
 - `11-worked-example.yaml` — an end-to-end mirror of the spec's own Appendix
   policy.

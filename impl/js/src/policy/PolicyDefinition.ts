@@ -32,7 +32,7 @@ export interface Meta {
   /** Declared subject vocabulary; when present, enforced at construction (§3.2.2, EC-8). */
   subjects?: string[];
   /** Declared custom `$`-operator vocabulary; when present, enforced at construction (§3.2.3, EC-13). */
-  customOperators?: string[];
+  operators?: string[];
   /** Opaque application data - never validated, enforced, or cross-checked (§3.2.4). */
   application?: unknown;
 }

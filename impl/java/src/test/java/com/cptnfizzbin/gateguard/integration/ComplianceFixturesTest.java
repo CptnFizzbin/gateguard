@@ -87,7 +87,7 @@ public class ComplianceFixturesTest {
     @Test
     public void resolveUsesTheBareOverloadWhenThereIsNoInstance() {
         Policy policy = Policy.from(new PolicyDefinition(
-            1, List.of(new PolicyDefinition.Rule("Read", "Article", null)), List.of()
+            "1.0.0", List.of(new PolicyDefinition.Rule("allow", "Read", "Article", null))
         ));
         ComplianceFixtures.TestCase testCase = new ComplianceFixtures.TestCase("n", "Read", "Article", null, true);
 
@@ -97,9 +97,8 @@ public class ComplianceFixturesTest {
     @Test
     public void resolveTagsInstanceDataWithDunderName() {
         Policy policy = Policy.from(new PolicyDefinition(
-            1,
-            List.of(new PolicyDefinition.Rule("Update", "Article", Map.of("owner_id", 1))),
-            List.of()
+            "1.0.0",
+            List.of(new PolicyDefinition.Rule("allow", "Update", "Article", Map.of("owner_id", 1)))
         ));
         ComplianceFixtures.TestCase matching = new ComplianceFixtures.TestCase(
             "n", "Update", "Article", Map.of("owner_id", 1), true

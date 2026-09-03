@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
-import { Policy, PolicyDefinition } from "../../src";
+import { createOperator, Operator, Policy, PolicyDefinition } from "../../src";
 import { GATEGUARD_POLICY_VERSION } from "../../src/version";
 import { listYamlFiles, actionArgFor, subjectArgFor, isIncluded } from "./complianceFixtures";
 
@@ -63,6 +63,23 @@ function discoverFixtureFiles(): FixtureFile[] {
   return listYamlFiles(FIXTURES_DIR).map((filePath) => ({ fileName: path.basename(filePath), filePath }));
 }
 
+/**
+ * Some v1 conformance suites exercise a custom condition operator, which -
+ * per SPEC_V1-0-0.md §7.4.12 - only the host application (here, this test
+ * suite) can implement; declaring it in meta.operators documents it but
+ * doesn't wire up behavior. Keyed by fixture file name.
+ */
+const CUSTOM_OPERATORS: Record<string, Operator[]> = {
+  "11-worked-example.yaml": [
+    // Mirrors the spec Appendix's own suggested implementation: "one that
+    // checks subject.roles.includes('admin')".
+    createOperator("$hasRole", (subject, value) => {
+      const roles = subject && typeof subject === "object" ? (subject as Record<string, unknown>).roles : undefined;
+      return Array.isArray(roles) && roles.includes(value);
+    }),
+  ],
+};
+
 function loadSuites(filePath: string): V1Suite[] {
   const raw = fs.readFileSync(filePath, "utf-8");
   return YAML.parseAllDocuments(raw).map((doc) => doc.toJSON() as V1Suite);
@@ -74,8 +91,9 @@ test("discovers at least one v1 conformance fixture file", () => {
   expect(fixtureFiles.length).toBeGreaterThan(0);
 });
 
-describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) => {
+describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ fileName, filePath }) => {
   const suites = loadSuites(filePath);
+  const operators = CUSTOM_OPERATORS[fileName] ?? [];
 
   test("every document in the file is a well-formed suite", () => {
     for (const suite of suites) {
@@ -90,7 +108,7 @@ describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) 
     // exceeds this suite's own baked-in COMPLIANT_VERSION - see
     // complianceFixtures.ts's isIncluded.
     describe.skipIf(!isIncluded(suite.version, COMPLIANT_VERSION))(`version ${suite.version}`, () => {
-      const policy = Policy.from(suite);
+      const policy = Policy.from(suite, operators);
       const cases = suite.cases.map((c) => ({
         ...c,
         name: c.name ?? `${c.action} / ${c.subject} -> ${c.expected}`,

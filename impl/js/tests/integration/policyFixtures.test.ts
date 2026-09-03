@@ -24,8 +24,8 @@ const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/policies");
 /**
  * Some fixture policies exercise a custom condition operator, which - per
  * SPEC_V1-0-0.md §7.4.12 - only the host application (here, this test
- * suite) can implement; declaring it in meta.customOperators documents it
- * but doesn't wire up behavior. Keyed by fixture file name.
+ * suite) can implement; declaring it in meta.operators documents it but
+ * doesn't wire up behavior. Keyed by fixture file name.
  */
 const CUSTOM_CHECKERS: Record<string, Operator[]> = {
   "policy-05-advanced.yaml": [

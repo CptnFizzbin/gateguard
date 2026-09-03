@@ -5,8 +5,8 @@ import { createSubject } from "../subject";
 import { createOperator } from "../conditions";
 import { PolicyArgumentError } from "../errors";
 
-describe("PolicyBuilder: meta.actions/subjects/customOperators are derived from usage", () => {
-  test("buildDef() derives actions/subjects/customOperators from what was actually used", () => {
+describe("PolicyBuilder: meta.actions/subjects/operators are derived from usage", () => {
+  test("buildDef() derives actions/subjects/operators from what was actually used", () => {
     const article = createSubject("Article");
     const user = createSubject("User");
     const read = createAction("Read");
@@ -20,7 +20,7 @@ describe("PolicyBuilder: meta.actions/subjects/customOperators are derived from 
 
     expect(def.meta?.actions).toEqual(["Read", "Update"]);
     expect(def.meta?.subjects).toEqual(["Article", "User"]);
-    expect(def.meta?.customOperators).toEqual(["$hasRole"]);
+    expect(def.meta?.operators).toEqual(["$hasRole"]);
   });
 
   test("leaves the wildcard tokens undeclared by default", () => {

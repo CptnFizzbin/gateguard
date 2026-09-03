@@ -21,7 +21,7 @@ const BUILTIN_OPERATOR_NAMES = new Set<string>(DefaultOperators.map((op) => op.n
 
 /**
  * Recursively collects every non-built-in, `$`-prefixed operator name used
- * anywhere in a Conditions tree - used to enforce `meta.customOperators`
+ * anywhere in a Conditions tree - used to enforce `meta.operators`
  * coverage at construction time (§3.2.3, EC-13).
  */
 function collectCustomOperators(condition: Condition | undefined, out: Set<string>): void {
@@ -108,7 +108,7 @@ export class Policy<
 
     const actionsCatalog = meta?.actions ? new Set(meta.actions) : undefined;
     const subjectsCatalog = meta?.subjects ? new Set(meta.subjects) : undefined;
-    const customOpCatalog = meta?.customOperators ? new Set(meta.customOperators) : undefined;
+    const operatorsCatalog = meta?.operators ? new Set(meta.operators) : undefined;
 
     for (const rule of definition.rules as RuleTuple[]) {
       if (!Array.isArray(rule) || rule.length < 3) {
@@ -155,13 +155,13 @@ export class Policy<
         );
       }
 
-      if (customOpCatalog && conditions) {
+      if (operatorsCatalog && conditions) {
         const used = new Set<string>();
         collectCustomOperators(conditions, used);
         for (const op of used) {
-          if (!customOpCatalog.has(op)) {
+          if (!operatorsCatalog.has(op)) {
             throw new PolicyLoadException(
-              `Rule uses custom operator "${op}" not covered by meta.customOperators (SPEC_V1-0-0.md §3.2.3, EC-13).`
+              `Rule uses custom operator "${op}" not covered by meta.operators (SPEC_V1-0-0.md §3.2.3, EC-13).`
             );
           }
         }
