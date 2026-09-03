@@ -263,22 +263,12 @@ public final class ConditionResolver {
      * compiling it to a Java regex - the spec explicitly permits this
      * ("Implementations MAY implement $substr however they like internally
      * (including compiling it to the host language's native regex engine,
-     * e.g. translating `*`/`**` to `.+` and escaping literal segments)").
+     * e.g. translating `*` to `.*` and escaping literal segments)").
      * {@link #parse} returns {@code null} for a structurally invalid
      * pattern (an unescaped "^" anywhere but the first character, or an
      * unescaped "$" anywhere but the last).
      */
     private static final class SubstrPattern {
-        // Private-use Unicode stand-ins for each escaped special character -
-        // resolving escapes to these first (via plain String.replace calls)
-        // lets the rest of parsing work with simple String operations
-        // (indexOf/split) instead of a hand-rolled character scan, since a
-        // wildcard/anchor split can't accidentally trip over an escaped one.
-        private static final String ESC_BACKSLASH = "";
-        private static final String ESC_CARET = "";
-        private static final String ESC_DOLLAR = "";
-        private static final String ESC_STAR = "";
-
         private final Pattern compiled;
 
         private SubstrPattern(Pattern compiled) {
@@ -286,50 +276,44 @@ public final class ConditionResolver {
         }
 
         static SubstrPattern parse(String raw) {
-            // Resolve "\\" first so a literal backslash immediately before a
-            // special character (e.g. "\\*", an escaped backslash followed by
-            // a real wildcard) isn't mistaken for that character's own escape.
-            String resolved = raw
-                .replace("\\\\", ESC_BACKSLASH)
-                .replace("\\^", ESC_CARET)
-                .replace("\\$", ESC_DOLLAR)
-                .replace("\\*", ESC_STAR);
-            // Anything left over as a literal "^"/"$" is genuinely unescaped.
-            // An unescaped "^" anywhere but the first character, or an
-            // unescaped "$" anywhere but the last, is an invalid pattern.
-            if (resolved.lastIndexOf('^') > 0) return null;
-            int firstDollar = resolved.indexOf('$');
-            if (firstDollar != -1 && firstDollar != resolved.length() - 1) return null;
-
-            boolean anchorStart = !resolved.isEmpty() && resolved.charAt(0) == '^';
-            boolean anchorEnd = !resolved.isEmpty() && resolved.charAt(resolved.length() - 1) == '$';
-            String body = resolved.substring(anchorStart ? 1 : 0, resolved.length() - (anchorEnd ? 1 : 0));
-
-            // "*"/"**" (or any longer run) are match-equivalent wildcards.
-            String[] segments = body.split("\\*+", -1);
-
-            // Translate to a regex: each literal segment quoted verbatim, a
-            // wildcard becomes ".+" (one-or-more, DOTALL so it's truly "any
-            // character"), and the leading/trailing anchors carry straight
-            // through as regex anchors.
             StringBuilder regex = new StringBuilder();
-            if (anchorStart) regex.append('^');
-            for (int idx = 0; idx < segments.length; idx++) {
-                if (idx > 0) regex.append(".+");
-                regex.append(Pattern.quote(unescape(segments[idx])));
+            int n = raw.length();
+
+            for (int i = 0; i < n; i++) {
+                char c = raw.charAt(i);
+
+                switch (c) {
+                    case '\\':
+                        // "\\" escapes the very next character, whatever it
+                        // is, to a literal - a trailing "\\" with nothing
+                        // following it is simply ignored.
+                        if (i + 1 >= n) break;
+                        regex.append(Pattern.quote(String.valueOf(raw.charAt(i + 1))));
+                        i++; // skip the escaped character
+                        break;
+                    case '*':
+                        // Zero or more characters; a run of consecutive "*"
+                        // is match-equivalent to a single one.
+                        regex.append(".*");
+                        break;
+                    case '^':
+                        // Only meaningful as the pattern's first character -
+                        // anywhere else it's a structurally invalid pattern.
+                        if (i != 0) return null;
+                        regex.append('^');
+                        break;
+                    case '$':
+                        // Only meaningful as the pattern's last character.
+                        if (i != n - 1) return null;
+                        regex.append('$');
+                        break;
+                    default:
+                        regex.append(Pattern.quote(String.valueOf(c)));
+                }
             }
-            if (anchorEnd) regex.append('$');
 
+            // DOTALL so "." (from ".*") truly means "any character".
             return new SubstrPattern(Pattern.compile(regex.toString(), Pattern.DOTALL));
-        }
-
-        /** Substitutes each escape sentinel back to the literal character it stands for. */
-        private static String unescape(String segment) {
-            return segment
-                .replace(ESC_BACKSLASH, "\\")
-                .replace(ESC_CARET, "^")
-                .replace(ESC_DOLLAR, "$")
-                .replace(ESC_STAR, "*");
         }
 
         boolean matches(String subject) {
