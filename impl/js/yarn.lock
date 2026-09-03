@@ -5,9 +5,9 @@ __metadata:
   version: 10
   cacheKey: 10c0
 
-"@cptnfizzbin/keycard@workspace:.":
+"@cptnfizzbin/gateguard@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@cptnfizzbin/keycard@workspace:."
+  resolution: "@cptnfizzbin/gateguard@workspace:."
   dependencies:
     "@types/node": "npm:^20.0.0"
     "@types/semver": "npm:^7.8.0"

@@ -1,4 +1,4 @@
-KeyCard Spec
+GateGuard Spec
 ============
 
 - Strongly inspired by CASL.js
@@ -35,7 +35,7 @@ Policy Definition
 example:
 
 ```yaml
-version: "1.0.0" # KeyCard policy spec version (SemVer)
+version: "1.0.0" # GateGuard policy spec version (SemVer)
 meta:
   actions: [Create, Update, Delete]
   subjects: [Article]

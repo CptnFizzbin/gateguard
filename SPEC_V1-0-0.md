@@ -1,4 +1,4 @@
-# KeyCard Policy Specification — v1.0.0
+# GateGuard Policy Specification — v1.0.0
 
 Status: Normative for `version` `1.x.x` policy documents (§2).
 
@@ -12,7 +12,7 @@ are to be interpreted as in [RFC 2119](https://www.ietf.org/rfc/rfc2119.txt).
 
 ## 1. Scope
 
-KeyCard **MUST NOT** read or write policy files itself. An application (or a
+GateGuard **MUST NOT** read or write policy files itself. An application (or a
 test, via whatever YAML/JSON library it chooses) parses a document into a plain
 `PolicyDefinition` value and hands it to `Policy.from(...)`. This spec defines:
 
@@ -773,7 +773,7 @@ A rule wildcarded on **both** sides **MUST NOT** carry a condition (§6, propert
    since the condition may then be evaluated against many differently-shaped
    subjects and silently fail to match some of them via §7.3's missing-field
    handling rather than erroring — a type-safety hazard, not a correctness one.
-   Conditions in KeyCard evaluate against the *target subject's* data (§7), not
+   Conditions in GateGuard evaluate against the *target subject's* data (§7), not
    against claims about the caller — an "admins can do anything"
    rule still isn't expressible as a doubly-wildcarded rule with a role
    condition attached; model it as a per-action rule with a condition instead
@@ -875,16 +875,16 @@ an uncataloged operator is.
 
 ## 9. Prior work
 
-KeyCard's condition language and rule-based `allow`/`deny` model draw on
+GateGuard's condition language and rule-based `allow`/`deny` model draw on
 [CASL](https://casl.js.org/), a JavaScript authorization library. In particular,
 the last-matching-rule-wins combining behavior in §6 mirrors CASL's own approach
-to resolving overlapping rules. KeyCard departs from CASL in scope (a
+to resolving overlapping rules. GateGuard departs from CASL in scope (a
 declarative, JSON/YAML-serializable `PolicyDefinition`
 meant to be produced server-side and evaluated in any language, rather than an
 in-process JavaScript ability builder) and in specifics (the condition operator
 set in §7, the `meta` catalogs and wildcard tokens in §3/§4/§5, and the
 validation/exception behavior throughout §2, §3, §6, and §8) — this document
-defines KeyCard's own behavior in full; familiarity with CASL is not assumed
+defines GateGuard's own behavior in full; familiarity with CASL is not assumed
 anywhere above.
 
 ## Appendix: worked example

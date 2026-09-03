@@ -19,7 +19,7 @@ import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
  *
  * Discovery, subject-argument construction, and version filtering are
  * shared with every other compliance suite via ./complianceFixtures - see
- * that module for the KEYCARD_FIXTURES_MAX_VERSION knob that overrides
+ * that module for the GATEGUARD_FIXTURES_MAX_VERSION knob that overrides
  * COMPLIANT_VERSION below for a single run.
  */
 
