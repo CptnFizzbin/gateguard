@@ -1,8 +1,7 @@
 package com.cptnfizzbin.gateguard.policy;
 
 import com.cptnfizzbin.gateguard.action.Action;
-import com.cptnfizzbin.gateguard.subject.SubjectDef;
-import com.cptnfizzbin.gateguard.subject.SubjectRef;
+import com.cptnfizzbin.gateguard.subject.Subject;
 import com.cptnfizzbin.gateguard.conditions.ConditionResolver;
 import com.cptnfizzbin.gateguard.conditions.Operator;
 import com.cptnfizzbin.gateguard.errors.PolicyException;
@@ -105,112 +104,18 @@ public final class Policy {
         return toDefinition();
     }
 
-    // --- can(...) ---------------------------------------------------------
-    // Every combination of `action: String | Action<?>` and
-    // `subject: String | SubjectDef<?> | SubjectRef<?>` is supported, per
-    // the unified action/subject parameter contract shared with `allow`/
-    // `deny`/`cannot`/`require` - all six forward to `checkPermission`
-    // below. `can(String, Object)` additionally covers a raw instance value
-    // (e.g. a POJO or a Map) whose subject name is inferred from it.
-
-    /** A bare-type-name check (no instance). */
-    public boolean can(String action, String subject) {
-        return checkPermission(action, subject, false, null);
-    }
-
-    /** An instance check - `subject` carries the instance value conditions are evaluated against. */
-    public boolean can(String action, Object subject) {
-        String subjectName = getSubjectNameFromObject(subject);
-        return checkPermission(action, subjectName, true, subject);
-    }
-
     /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
-    public boolean can(String action, SubjectDef<?> subject) {
-        return checkPermission(action, subject.getName(), false, null);
+    public boolean can(Action<?> action, Subject<?> subject) {
+        return checkPermission(action, subject);
     }
 
-    /** A wrapped-instance check - conditional rules are eligible. */
-    public boolean can(String action, SubjectRef<?> subject) {
-        return checkPermission(action, subject.getName(), true, subject.getValue());
-    }
-
-    public boolean can(Action<?> action, String subject) {
-        return checkPermission(action.getName(), subject, false, null);
-    }
-
-    /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
-    public boolean can(Action<?> action, SubjectDef<?> subject) {
-        return checkPermission(action.getName(), subject.getName(), false, null);
-    }
-
-    /** A wrapped-instance check - conditional rules are eligible. */
-    public boolean can(Action<?> action, SubjectRef<?> subject) {
-        return checkPermission(action.getName(), subject.getName(), true, subject.getValue());
-    }
-
-    // --- cannot(...) --------------------------------------------------------
-
-    public boolean cannot(String action, String subject) {
+    public boolean cannot(Action<?> action, Subject<?> subject) {
         return !can(action, subject);
     }
 
-    public boolean cannot(String action, Object subject) {
-        return !can(action, subject);
-    }
-
-    public boolean cannot(String action, SubjectDef<?> subject) {
-        return !can(action, subject);
-    }
-
-    public boolean cannot(String action, SubjectRef<?> subject) {
-        return !can(action, subject);
-    }
-
-    public boolean cannot(Action<?> action, String subject) {
-        return !can(action, subject);
-    }
-
-    public boolean cannot(Action<?> action, SubjectDef<?> subject) {
-        return !can(action, subject);
-    }
-
-    public boolean cannot(Action<?> action, SubjectRef<?> subject) {
-        return !can(action, subject);
-    }
-
-    // --- require(...) --------------------------------------------------------
-
-    public void require(String action, String subject) throws PolicyException {
-        requireCan(can(action, subject), action, subject);
-    }
-
-    public void require(String action, Object subject) throws PolicyException {
-        requireCan(can(action, subject), action, subject);
-    }
-
-    public void require(String action, SubjectDef<?> subject) throws PolicyException {
-        requireCan(can(action, subject), action, subject.getName());
-    }
-
-    public void require(String action, SubjectRef<?> subject) throws PolicyException {
-        requireCan(can(action, subject), action, subject.getName());
-    }
-
-    public void require(Action<?> action, String subject) throws PolicyException {
-        requireCan(can(action, subject), action.getName(), subject);
-    }
-
-    public void require(Action<?> action, SubjectDef<?> subject) throws PolicyException {
-        requireCan(can(action, subject), action.getName(), subject.getName());
-    }
-
-    public void require(Action<?> action, SubjectRef<?> subject) throws PolicyException {
-        requireCan(can(action, subject), action.getName(), subject.getName());
-    }
-
-    private static void requireCan(boolean allowed, String action, Object subject) throws PolicyException {
-        if (!allowed) {
-            throw new PolicyException("Access denied: cannot " + action + " on " + subject);
+    public void require(Action<?> action, Subject<?> subject) throws PolicyException {
+        if (!can(action, subject)) {
+            throw new PolicyException("Access denied: cannot " + action.getName() + " on " + subject.getName());
         }
     }
 
@@ -222,24 +127,26 @@ public final class Policy {
      * rules: exactly one rule decides the outcome, or none does and the
      * result is default deny.
      */
-    private boolean checkPermission(String action, String subjectName, boolean hasInstance, Object subjectValue) {
+    private boolean checkPermission(Action<?> action, Subject<?> subject) {
         PolicyDefinition.Meta meta = definition.getMeta();
         WildcardToken anyAction = Wildcards.effectiveAnyAction(meta);
         WildcardToken anySubject = Wildcards.effectiveAnySubject(meta);
         List<PolicyDefinition.Rule> rules = definition.getRules();
+        String actionName = action.getName();
+        String subjectName = subject.getName();
 
         for (int i = rules.size() - 1; i >= 0; i--) {
             PolicyDefinition.Rule rule = rules.get(i);
 
-            if (!Wildcards.matches(action, rule.getAction(), anyAction)) continue;
+            if (!Wildcards.matches(actionName, rule.getAction(), anyAction)) continue;
             if (!Wildcards.matches(subjectName, rule.getSubjectName(), anySubject)) continue;
 
             Map<String, Object> conditions = rule.getConditions();
             if (conditions != null) {
                 // A conditional rule can never be satisfied by a bare-type/no-instance
                 // check - there's no instance data for the condition to inspect (EC-7).
-                if (!hasInstance) continue;
-                if (!resolver.evaluate(subjectValue, conditions)) continue;
+                if (subject.getInstance().isEmpty()) continue;
+                if (!resolver.evaluate(subject.getInstance().get(), conditions)) continue;
                 return "allow".equals(rule.getEffect());
             }
 
@@ -247,17 +154,6 @@ public final class Policy {
         }
 
         return false; // EC-1, EC-2: default deny.
-    }
-
-    private String getSubjectNameFromObject(Object subject) {
-        if (subject instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) subject;
-            if (map.containsKey("__name")) {
-                return (String) map.get("__name");
-            }
-        }
-        return subject.getClass().getSimpleName();
     }
 
     private static void validateVersion(String version) {

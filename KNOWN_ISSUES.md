@@ -140,14 +140,3 @@ behavior that's merely wrong:
   `V1ConformanceFixtureTest`/`V1Fixtures.java` are a model for the shape
   this should take.)
 
-## `SubjectDef` evaluation (EC-9)
-
-- The "subject value" used when evaluating conditions against a bare
-  `SubjectDef` (no wrapped instance) needs an explicit `hasInstance`-style
-  check once `impl/js` adopts the v1 schema, mirroring
-  `impl/java/.../policy/Policy.java`'s `can(Action<?>, SubjectDef<T>)`
-  vs. `can(Action<?>, SubjectRef<T>)` overloads (which never even reach
-  condition evaluation for a bare `SubjectDef`) - worth an explicit code
-  comment referencing EC-9 once touched for other reasons, so the
-  "MUST NOT accidentally match" requirement is satisfied by design rather
-  than incidentally.

@@ -2,11 +2,13 @@ package com.cptnfizzbin.gateguard;
 
 import org.junit.Test;
 
+import com.cptnfizzbin.gateguard.action.ActionFactory;
 import com.cptnfizzbin.gateguard.conditions.Operator;
 import com.cptnfizzbin.gateguard.policy.Policy;
 import com.cptnfizzbin.gateguard.policy.PolicyDefinition;
 import com.cptnfizzbin.gateguard.errors.PolicyLoadException;
 import com.cptnfizzbin.gateguard.errors.PolicyVersionException;
+import com.cptnfizzbin.gateguard.subject.SubjectFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -131,8 +133,8 @@ public class PolicyValidationTest {
 
         // With the wildcard disabled, "_ANY_" is just an ordinary, literal
         // action name - it does not match "Read".
-        assertTrue(policy.cannot("Read", "Article"));
-        assertTrue(policy.can("_ANY_", "Article"));
+        assertTrue(policy.cannot(ActionFactory.create("Read"), SubjectFactory.create("Article")));
+        assertTrue(policy.can(ActionFactory.create("_ANY_"), SubjectFactory.create("Article")));
     }
 
     @Test

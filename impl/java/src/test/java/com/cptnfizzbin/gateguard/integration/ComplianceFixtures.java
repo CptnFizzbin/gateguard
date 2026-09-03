@@ -1,14 +1,17 @@
 package com.cptnfizzbin.gateguard.integration;
 
+import com.cptnfizzbin.gateguard.action.Action;
+import com.cptnfizzbin.gateguard.action.ActionFactory;
 import com.cptnfizzbin.gateguard.policy.Policy;
 import com.cptnfizzbin.gateguard.policy.PolicyDefinition;
+import com.cptnfizzbin.gateguard.subject.Subject;
+import com.cptnfizzbin.gateguard.subject.SubjectFactory;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -118,18 +121,17 @@ final class ComplianceFixtures {
 
     /**
      * Resolves one {@link TestCase} against a {@link Policy} the same way
-     * every fixture-driven suite does: a bare subject-name check when
-     * there's no instance data (a {@code SubjectDef}-style, EC-7/EC-9
-     * check), or a `{ ...subjectData, __name: subject }` map (mirroring a
-     * {@code SubjectRef}) when there is.
+     * every fixture-driven suite does: a bare Subject (no instance) when
+     * there's no instance data (EC-7/EC-9), or one wrapping
+     * {@code subjectData} as its instance when there is.
      */
     static boolean resolve(Policy policy, TestCase testCase) {
+        Action<String> action = ActionFactory.create(testCase.action());
+        Subject<Map<String, Object>> subject = SubjectFactory.<Map<String, Object>>create(testCase.subject());
         if (testCase.subjectData() != null) {
-            Map<String, Object> subjectMap = new HashMap<>(testCase.subjectData());
-            subjectMap.put("__name", testCase.subject());
-            return policy.can(testCase.action(), subjectMap);
+            subject = subject.wrap(testCase.subjectData());
         }
-        return policy.can(testCase.action(), testCase.subject());
+        return policy.can(action, subject);
     }
 
     /** A parsed MAJOR.MINOR.PATCH SemVer string, per SPEC_V1-0-0.md §2. */

@@ -8,7 +8,7 @@ import com.cptnfizzbin.gateguard.policy.Policy;
 import com.cptnfizzbin.gateguard.builder.PolicyBuilder;
 import com.cptnfizzbin.gateguard.action.Action;
 import com.cptnfizzbin.gateguard.action.ActionFactory;
-import com.cptnfizzbin.gateguard.subject.SubjectDef;
+import com.cptnfizzbin.gateguard.subject.Subject;
 import com.cptnfizzbin.gateguard.subject.SubjectFactory;
 import com.cptnfizzbin.gateguard.conditions.Conditions;
 import com.cptnfizzbin.gateguard.conditions.Operator;
@@ -30,7 +30,7 @@ public class PolicyTest {
 
     @Test
     public void testCanCheckByDefinition() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> create = ActionFactory.create("Create");
 
         Policy policy = new PolicyBuilder()
@@ -42,7 +42,7 @@ public class PolicyTest {
 
     @Test
     public void testCanCheckByReference() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> update = ActionFactory.create("Update");
 
         Article data = new Article(1, 42, "published");
@@ -55,7 +55,7 @@ public class PolicyTest {
 
     @Test
     public void testCannotCheck() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -67,7 +67,7 @@ public class PolicyTest {
 
     @Test
     public void testRequireAllowed() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> create = ActionFactory.create("Create");
 
         Policy policy = new PolicyBuilder()
@@ -80,7 +80,7 @@ public class PolicyTest {
 
     @Test(expected = PolicyException.class)
     public void testRequireDenied() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -92,7 +92,7 @@ public class PolicyTest {
 
     @Test
     public void testDenyOverridesAllow() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -106,7 +106,7 @@ public class PolicyTest {
 
     @Test
     public void testDenyWithConditionOnlyOverridesWhenItMatches() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -120,7 +120,7 @@ public class PolicyTest {
 
     @Test
     public void testLastRuleWinsReopensWhatAnEarlierDenyClosed() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -132,37 +132,31 @@ public class PolicyTest {
     }
 
     /**
-     * Issue 6: `allow`/`deny`/`can`/`cannot`/`require` all accept every
-     * combination of `String`/`Action<?>` (action) and `String`/`SubjectDef<?>`/
-     * `SubjectRef<?>` (subject) - not just the `Action<?>`+`SubjectDef<?>`/
-     * `SubjectRef<?>` combinations the builder previously supported.
+     * `allow`/`deny`/`can`/`cannot`/`require` always take a real
+     * `Action<?>` and `Subject<?>` - no bare-`String` or raw-instance
+     * overloads. A bare Subject (no `.wrap()`) is a type-only check; a
+     * wrapped one carries instance data a Conditions element can inspect.
      */
     @Test
-    public void everyActionAndSubjectShapeCombinationIsAccepted() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+    public void alwaysRequiresActionAndSubject() {
+        Subject<Article> article = SubjectFactory.create("Article");
+        Action<String> read = ActionFactory.create("Read");
         Action<String> update = ActionFactory.create("Update");
 
         Policy policy = new PolicyBuilder()
-            .allow("Read", "Article")
-            .allow("Create", article)
-            .allow(update, "Article")
+            .allow(read, article)
             .allow(update, article, Conditions.eq(Article::getOwnerId, 42))
             .build();
 
-        assertTrue(policy.can("Read", "Article"));
-        assertTrue(policy.can("Read", article));
-        assertTrue(policy.can(ActionFactory.create("Read"), "Article"));
-        assertTrue(policy.can(ActionFactory.create("Read"), article));
-
-        assertTrue(policy.can("Create", article));
-        assertTrue(policy.can(update, "Article"));
+        assertTrue(policy.can(read, article));
+        assertFalse(policy.cannot(read, article));
+        policy.require(read, article); // should not throw
 
         Article owned = new Article(1, 42, "published");
-        assertTrue(policy.can("Update", article.wrap(owned)));
         assertTrue(policy.can(update, article.wrap(owned)));
 
-        assertFalse(policy.cannot("Read", "Article"));
-        policy.require("Read", "Article"); // should not throw
+        Article notOwned = new Article(1, 1, "published");
+        assertFalse(policy.can(update, article.wrap(notOwned)));
     }
 
     /**
@@ -173,7 +167,7 @@ public class PolicyTest {
      */
     @Test
     public void builderSuppliedOperatorsCarryThroughToTheBuiltPolicy() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder(List.of(

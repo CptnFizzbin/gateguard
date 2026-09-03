@@ -1,7 +1,7 @@
 package com.cptnfizzbin.gateguard.builder;
 
 import com.cptnfizzbin.gateguard.action.Action;
-import com.cptnfizzbin.gateguard.subject.SubjectDef;
+import com.cptnfizzbin.gateguard.subject.Subject;
 import com.cptnfizzbin.gateguard.conditions.Operator;
 import com.cptnfizzbin.gateguard.errors.PolicyArgumentException;
 import com.cptnfizzbin.gateguard.policy.Policy;
@@ -48,72 +48,22 @@ public final class PolicyBuilder {
     }
 
     // --- allow(...)/deny(...) -----------------------------------------------
-    // Every combination of `action: String | Action<?>` and
-    // `subject: String | SubjectDef<?>` is supported - a rule references a
-    // subject *type*, never an instance, so unlike `Policy.can`/`cannot`/
-    // `require` there's no SubjectRef-shaped overload here.
+    // A rule references a subject *type*, never an instance - a wrapped
+    // Subject's instance is simply ignored here.
 
-    public PolicyBuilder allow(String action, String subject) {
+    public PolicyBuilder allow(Action<?> action, Subject<?> subject) {
         return allow(action, subject, null);
     }
 
-    public PolicyBuilder allow(String action, String subject, Map<String, Object> conditions) {
-        return addRule("allow", action, subject, conditions);
-    }
-
-    public PolicyBuilder allow(String action, SubjectDef<?> subject) {
-        return allow(action, subject, null);
-    }
-
-    public PolicyBuilder allow(String action, SubjectDef<?> subject, Map<String, Object> conditions) {
-        return addRule("allow", action, subject.getName(), conditions);
-    }
-
-    public PolicyBuilder allow(Action<?> action, String subject) {
-        return allow(action, subject, null);
-    }
-
-    public PolicyBuilder allow(Action<?> action, String subject, Map<String, Object> conditions) {
-        return addRule("allow", action.getName(), subject, conditions);
-    }
-
-    public PolicyBuilder allow(Action<?> action, SubjectDef<?> subject) {
-        return allow(action, subject, null);
-    }
-
-    public PolicyBuilder allow(Action<?> action, SubjectDef<?> subject, Map<String, Object> conditions) {
+    public PolicyBuilder allow(Action<?> action, Subject<?> subject, Map<String, Object> conditions) {
         return addRule("allow", action.getName(), subject.getName(), conditions);
     }
 
-    public PolicyBuilder deny(String action, String subject) {
+    public PolicyBuilder deny(Action<?> action, Subject<?> subject) {
         return deny(action, subject, null);
     }
 
-    public PolicyBuilder deny(String action, String subject, Map<String, Object> conditions) {
-        return addRule("deny", action, subject, conditions);
-    }
-
-    public PolicyBuilder deny(String action, SubjectDef<?> subject) {
-        return deny(action, subject, null);
-    }
-
-    public PolicyBuilder deny(String action, SubjectDef<?> subject, Map<String, Object> conditions) {
-        return addRule("deny", action, subject.getName(), conditions);
-    }
-
-    public PolicyBuilder deny(Action<?> action, String subject) {
-        return deny(action, subject, null);
-    }
-
-    public PolicyBuilder deny(Action<?> action, String subject, Map<String, Object> conditions) {
-        return addRule("deny", action.getName(), subject, conditions);
-    }
-
-    public PolicyBuilder deny(Action<?> action, SubjectDef<?> subject) {
-        return deny(action, subject, null);
-    }
-
-    public PolicyBuilder deny(Action<?> action, SubjectDef<?> subject, Map<String, Object> conditions) {
+    public PolicyBuilder deny(Action<?> action, Subject<?> subject, Map<String, Object> conditions) {
         return addRule("deny", action.getName(), subject.getName(), conditions);
     }
 
