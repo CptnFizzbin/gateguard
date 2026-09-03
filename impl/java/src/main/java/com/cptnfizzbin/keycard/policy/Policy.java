@@ -1,27 +1,62 @@
 package com.cptnfizzbin.keycard.policy;
 
 import com.cptnfizzbin.keycard.action.Action;
-import com.cptnfizzbin.keycard.subject.SubjectDef;
-import com.cptnfizzbin.keycard.subject.SubjectRef;
+import com.cptnfizzbin.keycard.subject.Subject;
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.errors.PolicyException;
+import com.cptnfizzbin.keycard.errors.PolicyLoadException;
+import com.cptnfizzbin.keycard.errors.PolicyVersionException;
+import com.cptnfizzbin.keycard.version.KeyCardVersion;
 
-import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
+import java.util.Set;
 
 public final class Policy {
+    /**
+     * The highest version this implementation supports natively -
+     * SPEC_V1-0-0.md §2. PATCH never affects compatibility. Parsed from
+     * {@link KeyCardVersion#KEYCARD_POLICY_VERSION}, the single source
+     * of truth {@link com.cptnfizzbin.keycard.builder.PolicyBuilder#BUILDER_VERSION}
+     * reads from too, so a builder can never stamp a version this same
+     * implementation would then refuse to load.
+     */
+    public static final SemVer SUPPORTED_VERSION = SemVer.parse(KeyCardVersion.KEYCARD_POLICY_VERSION);
+
     private final PolicyDefinition definition;
     private final ConditionResolver resolver;
 
     public Policy(PolicyDefinition definition) {
-        this(definition, new ConditionResolver());
+        this(definition, (Collection<Operator>) null);
     }
 
+    /**
+     * @param operators custom operators to register alongside the
+     *   built-ins (SPEC_V1-0-0.md §7.4.12) - a single collection-based
+     *   entry point shared with {@code PolicyBuilder}, so a
+     *   builder-produced definition can carry its operators through
+     *   consistently.
+     */
+    public Policy(PolicyDefinition definition, Collection<Operator> operators) {
+        validateVersion(definition.getVersion());
+
+        this.definition = definition;
+        this.resolver = new ConditionResolver(operators);
+        validateOperatorsRegistered(definition, resolver);
+        validateRules(definition);
+    }
+
+    /** Advanced escape hatch: supply an already-built {@link ConditionResolver} directly. */
     public Policy(PolicyDefinition definition, ConditionResolver resolver) {
+        validateVersion(definition.getVersion());
+
         this.definition = definition;
         this.resolver = resolver != null ? resolver : new ConditionResolver();
+        validateOperatorsRegistered(definition, this.resolver);
+        validateRules(definition);
     }
 
     /**
@@ -34,6 +69,10 @@ public final class Policy {
         return new Policy(definition);
     }
 
+    public static Policy from(PolicyDefinition definition, Collection<Operator> operators) {
+        return new Policy(definition, operators);
+    }
+
     public static Policy from(PolicyDefinition definition, ConditionResolver resolver) {
         return new Policy(definition, resolver);
     }
@@ -41,6 +80,11 @@ public final class Policy {
     /** Alias of {@link #from(PolicyDefinition)}. */
     public static Policy fromDto(PolicyDefinition definition) {
         return from(definition);
+    }
+
+    /** Alias of {@link #from(PolicyDefinition, Collection)}. */
+    public static Policy fromDto(PolicyDefinition definition, Collection<Operator> operators) {
+        return from(definition, operators);
     }
 
     /** Alias of {@link #from(PolicyDefinition, ConditionResolver)}. */
@@ -62,100 +106,150 @@ public final class Policy {
         return toDefinition();
     }
 
-    public <T> boolean can(Action<?> action, SubjectDef<T> subject) {
-        return checkPermission(action, subject.getName(), null);
+    /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
+    public boolean can(Action<?> action, Subject<?> subject) {
+        return checkPermission(action, subject);
     }
 
-    public <T> boolean can(Action<?> action, SubjectRef<T> subject) {
-        return checkPermission(action, subject.getName(), subject.getValue());
-    }
-
-    public boolean can(String action, String subject) {
-        return checkPermissionString(action, subject, null);
-    }
-
-    public boolean can(String action, Object subject) {
-        String subjectName = getSubjectNameFromObject(subject);
-        return checkPermissionString(action, subjectName, subject);
-    }
-
-    public <T> boolean cannot(Action<?> action, SubjectDef<T> subject) {
+    public boolean cannot(Action<?> action, Subject<?> subject) {
         return !can(action, subject);
     }
 
-    public <T> boolean cannot(Action<?> action, SubjectRef<T> subject) {
-        return !can(action, subject);
-    }
-
-    public <T> void require(Action<?> action, SubjectDef<T> subject) throws PolicyException {
+    public void require(Action<?> action, Subject<?> subject) throws PolicyException {
         if (!can(action, subject)) {
             throw new PolicyException("Access denied: cannot " + action.getName() + " on " + subject.getName());
         }
     }
 
-    public <T> void require(Action<?> action, SubjectRef<T> subject) throws PolicyException {
-        if (!can(action, subject)) {
-            throw new PolicyException("Access denied: cannot " + action.getName() + " on " + subject.getName());
+    /**
+     * SPEC_V1-0-0.md §6: reverse scan over `rules`, returning the effect of
+     * the first (i.e. most-recently-declared) rule whose action, subject,
+     * and (if present) conditions all match. There is no independent
+     * "allow AND NOT deny" veto and no combination of multiple matching
+     * rules: exactly one rule decides the outcome, or none does and the
+     * result is default deny.
+     */
+    private boolean checkPermission(Action<?> action, Subject<?> subject) {
+        PolicyDefinition.Meta meta = definition.getMeta();
+        WildcardToken anyAction = Wildcards.effectiveAnyAction(meta);
+        WildcardToken anySubject = Wildcards.effectiveAnySubject(meta);
+        List<PolicyDefinition.Rule> rules = definition.getRules();
+        String actionName = action.getName();
+        String subjectName = subject.getName();
+
+        for (int i = rules.size() - 1; i >= 0; i--) {
+            PolicyDefinition.Rule rule = rules.get(i);
+
+            if (!Wildcards.matches(actionName, rule.getAction(), anyAction)) continue;
+            if (!Wildcards.matches(subjectName, rule.getSubjectName(), anySubject)) continue;
+
+            Map<String, Object> conditions = rule.getConditions();
+            if (conditions != null) {
+                // A conditional rule can never be satisfied by a bare-type/no-instance
+                // check - there's no instance data for the condition to inspect (EC-7).
+                if (subject.getInstance().isEmpty()) continue;
+                if (!resolver.evaluate(subject.getInstance().get(), conditions)) continue;
+                return "allow".equals(rule.getEffect());
+            }
+
+            return "allow".equals(rule.getEffect());
+        }
+
+        return false; // EC-1, EC-2: default deny.
+    }
+
+    private static void validateVersion(String version) {
+        SemVer parsed;
+        try {
+            parsed = SemVer.parse(version);
+        } catch (RuntimeException e) {
+            throw new PolicyVersionException("Invalid policy version \"" + version + "\": " + e.getMessage());
+        }
+        if (!parsed.isCompatibleWith(SUPPORTED_VERSION)) {
+            throw new PolicyVersionException(
+                "Unsupported policy version \"" + version + "\": this implementation supports up to "
+                    + SUPPORTED_VERSION.major() + "." + SUPPORTED_VERSION.minor() + ".x (SPEC_V1-0-0.md §2)."
+            );
         }
     }
 
-    public Policy append(PolicyDefinition other) {
-        List<PolicyDefinition.Rule> combined = new ArrayList<>(definition.getAllowRules());
-        combined.addAll(other.getAllowRules());
-        List<PolicyDefinition.Rule> denyRules = new ArrayList<>(definition.getDenyRules());
-        denyRules.addAll(other.getDenyRules());
-        return new Policy(new PolicyDefinition(definition.getVersion(), combined, denyRules));
+    /**
+     * §3.2.3, EC-15 (promoted): when {@code meta.operators} is declared,
+     * every name it lists MUST already be registered on this Policy - built
+     * -in or custom - checked once here at construction time, regardless of
+     * whether any rule actually reaches that operator during evaluation.
+     * This replaces the previous behavior of deferring an unregistered-but
+     * -cataloged name to a runtime-only diagnostic.
+     */
+    private static void validateOperatorsRegistered(PolicyDefinition definition, ConditionResolver resolver) {
+        PolicyDefinition.Meta meta = definition.getMeta();
+        List<String> declared = meta != null ? meta.getOperators() : null;
+        if (declared == null) return;
+
+        resolver.assertAllRegistered(declared);
     }
 
-    /** True iff a rule allows this action/subject, and no rule denies it. */
-    private boolean checkPermission(Action<?> action, String subjectName, Object subjectValue) {
-        Predicate<PolicyDefinition.Rule> actionMatches = rule -> matchesAction(action, rule);
-        return matchesAnyRule(definition.getAllowRules(), actionMatches, subjectName, subjectValue)
-            && !matchesAnyRule(definition.getDenyRules(), actionMatches, subjectName, subjectValue);
-    }
+    private static void validateRules(PolicyDefinition definition) {
+        PolicyDefinition.Meta meta = definition.getMeta();
+        WildcardToken anyAction = Wildcards.effectiveAnyAction(meta);
+        WildcardToken anySubject = Wildcards.effectiveAnySubject(meta);
 
-    private boolean checkPermissionString(String actionName, String subjectName, Object subjectValue) {
-        Predicate<PolicyDefinition.Rule> actionMatches = rule -> matchesActionString(actionName, rule);
-        return matchesAnyRule(definition.getAllowRules(), actionMatches, subjectName, subjectValue)
-            && !matchesAnyRule(definition.getDenyRules(), actionMatches, subjectName, subjectValue);
-    }
+        Set<String> actionsCatalog = meta != null && meta.getActions() != null ? new HashSet<>(meta.getActions()) : null;
+        Set<String> subjectsCatalog = meta != null && meta.getSubjects() != null ? new HashSet<>(meta.getSubjects()) : null;
+        Set<String> operatorsCatalog = meta != null && meta.getOperators() != null ? new HashSet<>(meta.getOperators()) : null;
 
-    private boolean matchesAnyRule(
-        List<PolicyDefinition.Rule> rules,
-        Predicate<PolicyDefinition.Rule> actionMatches,
-        String subjectName,
-        Object subjectValue
-    ) {
-        for (PolicyDefinition.Rule rule : rules) {
-            if (actionMatches.test(rule) && matchesSubject(subjectName, rule)) {
-                if (rule.getConditions() == null || resolver.evaluate(subjectValue, rule.getConditions())) {
-                    return true;
+        for (PolicyDefinition.Rule rule : definition.getRules()) {
+            String effect = rule.getEffect();
+            String action = rule.getAction();
+            String subjectName = rule.getSubjectName();
+            Map<String, Object> conditions = rule.getConditions();
+
+            if (!"allow".equals(effect) && !"deny".equals(effect)) {
+                throw new PolicyLoadException(
+                    "Malformed rule tuple: effect must be \"allow\" or \"deny\", got " + effect
+                        + " (SPEC_V1-0-0.md §3.3, EC-10)."
+                );
+            }
+            if (action == null) {
+                throw new PolicyLoadException("Malformed rule tuple: action is required (SPEC_V1-0-0.md §3.3, EC-10).");
+            }
+            if (subjectName == null) {
+                throw new PolicyLoadException("Malformed rule tuple: subject is required (SPEC_V1-0-0.md §3.3, EC-10).");
+            }
+
+            boolean isWildcardAction = anyAction instanceof WildcardToken.Named named && action.equals(named.token());
+            boolean isWildcardSubject = anySubject instanceof WildcardToken.Named named && subjectName.equals(named.token());
+
+            if (isWildcardAction && isWildcardSubject && conditions != null) {
+                throw new PolicyLoadException(
+                    "Rule [" + effect + ", " + action + ", " + subjectName
+                        + "] is wildcarded on both the action and the subject but carries a Conditions element"
+                        + " - this MUST be unconditional (SPEC_V1-0-0.md §6 property 5, EC-6)."
+                );
+            }
+
+            if (actionsCatalog != null && !isWildcardAction && !actionsCatalog.contains(action)) {
+                throw new PolicyLoadException(
+                    "Rule action \"" + action + "\" is not covered by meta.actions (SPEC_V1-0-0.md §3.2.2, EC-8)."
+                );
+            }
+            if (subjectsCatalog != null && !isWildcardSubject && !subjectsCatalog.contains(subjectName)) {
+                throw new PolicyLoadException(
+                    "Rule subject \"" + subjectName + "\" is not covered by meta.subjects (SPEC_V1-0-0.md §3.2.2, EC-8)."
+                );
+            }
+
+            if (operatorsCatalog != null && conditions != null) {
+                Set<String> used = new HashSet<>();
+                ConditionResolver.collectCustomOperatorNames(conditions, used);
+                for (String op : used) {
+                    if (!operatorsCatalog.contains(op)) {
+                        throw new PolicyLoadException(
+                            "Rule uses custom operator \"" + op + "\" not covered by meta.operators (SPEC_V1-0-0.md §3.2.3, EC-13)."
+                        );
+                    }
                 }
             }
         }
-        return false;
-    }
-
-    private String getSubjectNameFromObject(Object subject) {
-        if (subject instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) subject;
-            if (map.containsKey("__name")) {
-                return (String) map.get("__name");
-            }
-        }
-        return subject.getClass().getSimpleName();
-    }
-
-    private boolean matchesAction(Action<?> action, PolicyDefinition.Rule rule) {
-        return action.getName().equals(rule.getAction()) || "*".equals(rule.getAction());
-    }
-
-    private boolean matchesActionString(String actionName, PolicyDefinition.Rule rule) {
-        return actionName.equals(rule.getAction()) || "*".equals(rule.getAction());
-    }
-
-    private boolean matchesSubject(String subjectName, PolicyDefinition.Rule rule) {
-        return subjectName.equals(rule.getSubjectName()) || "*".equals(rule.getSubjectName());
     }
 }

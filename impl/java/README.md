@@ -54,7 +54,7 @@ public class Main {
         Action<String> delete = ActionFactory.create("Delete");
 
         // Define your subjects
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
 
         // Build a policy
         Policy policy = new PolicyBuilder()
@@ -63,14 +63,14 @@ public class Main {
             .deny(delete, article, Map.of("status", Map.of("$not", "archived")))
             .build();
 
-        // Check by subject definition
+        // Check by subject type (no instance)
         if (policy.can(create, article)) {
             System.out.println("✓ Can create articles");
         }
 
-        // Check by subject reference
+        // Check by subject instance
         Article data = new Article(1, 1, "published");
-        SubjectRef<Article> ref = article.wrap(data);
+        Subject<Article> ref = article.wrap(data);
 
         if (policy.can(update, ref)) {
             System.out.println("✓ Can update own article");
@@ -92,11 +92,11 @@ Java's generic type system ensures compile-time verification:
 
 ```java
 Action<String> create = ActionFactory.create("Create");
-SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+Subject<Article> article = SubjectFactory.create("Article");
 
 policy.can(create, article);        // ✓ OK
-policy.can("Create", article);      // ✗ Compiler error
-policy.can(create, "Article");      // ✗ Compiler error
+policy.can("Create", article);      // ✗ Compiler error - action must be an Action<?>
+policy.can(create, "Article");      // ✗ Compiler error - subject must be a Subject<?>
 ```
 
 ## Condition Operators
@@ -108,10 +108,11 @@ policy.can(create, "Article");      // ✗ Compiler error
 - `$lte` - Less than or equal
 - `$in` - Value in collection
 - `$has` - Collection contains value
-- `$rgx` - Regex match
+- `$substr` - Substring pattern match (a small, non-regex pattern language - see SPEC_V1-0-0.md §7.4.6)
 - `$or` - Logical OR
 - `$and` - Logical AND
 - `$not` - Logical NOT
+- `$field` - Explicit field access, for a field whose name itself starts with "$"
 - Field conditions - Check nested properties
 
 ## API
@@ -125,23 +126,18 @@ Action<String> create = ActionFactory.create("Create");
 
 ### SubjectFactory
 
-Create type-safe subject definitions:
+Create type-safe subjects:
 ```java
-SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+Subject<Article> article = SubjectFactory.create("Article");
 ```
 
-### SubjectDef<T>
+### Subject<T>
 
+A single type covering both a bare subject (no instance) and a wrapped
+instance - `getInstance()` is empty until `.wrap()` is called.
 - `getName()` - Get subject name
-- `getType()` - Get subject class
-- `wrap(T obj)` - Create SubjectRef from object
-
-### SubjectRef<T>
-
-Reference to subject instance:
-- `getDefinition()` - Get SubjectDef
-- `getName()` - Get subject name
-- `getValue()` - Get wrapped object
+- `getInstance()` - Get the wrapped object, if any, as an `Optional<T>`
+- `wrap(T obj)` - Returns a new `Subject<T>` of the same name, with its instance set
 
 ### PolicyBuilder
 
@@ -156,11 +152,9 @@ Build policies with fluent API:
 ### Policy
 
 Check permissions:
-- `can(action, subjectDef)` - Check by definition
-- `can(action, subjectRef)` - Check by reference
+- `can(action, subject)` - Check if action is allowed
 - `cannot(action, subject)` - Check negation
 - `require(action, subject)` - Require permission (throws on denial)
-- `append(definition)` - Merge policies
 - `getDefinition()` - Get underlying definition
 
 ### ConditionResolver
@@ -170,10 +164,10 @@ Evaluates conditions:
 
 ### PolicyDefinition
 
-Serializable policy:
-- `getVersion()` - Get spec version
-- `getAllowRules()` - Get allow rules
-- `getDenyRules()` - Get deny rules
+Serializable policy, per SPEC_V1-0-0.md §3:
+- `getVersion()` - Get the SemVer spec version, e.g. `"1.0.0"`
+- `getMeta()` - Get the optional `meta` object (wildcard tokens, catalogs, application data)
+- `getRules()` - Get the ordered list of `[effect, action, subject, conditions?]` rules
 
 ### PolicyException
 
@@ -193,7 +187,7 @@ policy.can(Actions.Create, Subjects.Article);
 ```java
 // Check if user can update THIS article (with conditions)
 Article data = new Article(1, userId, "published");
-SubjectRef<Article> ref = article.wrap(data);
+Subject<Article> ref = article.wrap(data);
 policy.can(Actions.Update, ref);
 ```
 

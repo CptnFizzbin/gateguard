@@ -1,12 +1,17 @@
 package com.cptnfizzbin.keycard.integration;
 
+import com.cptnfizzbin.keycard.action.Action;
+import com.cptnfizzbin.keycard.action.ActionFactory;
 import com.cptnfizzbin.keycard.policy.Policy;
+import com.cptnfizzbin.keycard.policy.PolicyDefinition;
+import com.cptnfizzbin.keycard.subject.Subject;
+import com.cptnfizzbin.keycard.subject.SubjectFactory;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -14,18 +19,19 @@ import java.util.stream.Collectors;
 
 /**
  * Shared helpers for every compliance-fixture-driven integration suite -
- * {@link PolicyFixtures} (the pre-v1 fixtures under test/fixtures/policies)
- * and {@link V1Fixtures} (the spec-native fixtures under test/fixtures/v1)
+ * {@link PolicyFixtures} (the fixtures under test/fixtures/policies) and
+ * {@link V1Fixtures} (the spec-native fixtures under test/fixtures/v1)
  * today, and any future fixture set. Not a test class itself.
  *
  * Factors out the parts that don't depend on a fixture format's on-disk
- * shape: discovering `*.yaml` files, the `{ action, subject, subjectData?,
- * expected }` shape every format's individual cases boil down to once
- * parsed, resolving one such case against a {@link Policy}, and filtering
- * fixtures by the SemVer `version` they declare - so each format-specific
- * loader only has to own parsing its own document shape into that common
- * {@link TestCase}, not the discovery/resolution/filtering mechanics
- * around it.
+ * shape: discovering `*.yaml` files, parsing the v1 `rules`/`meta` shape
+ * (SPEC_V1-0-0.md §3) shared by every fixture format, the `{ action,
+ * subject, subjectData?, expected }` shape every format's individual
+ * cases boil down to once parsed, resolving one such case against a
+ * {@link Policy}, and filtering fixtures by the SemVer `version` they
+ * declare - so each format-specific loader only has to own parsing its
+ * own document's outer shape into that common {@link TestCase}, not the
+ * discovery/resolution/filtering mechanics around it.
  *
  * KeyCard itself never reads or writes policy.yaml text; parsing it into a
  * plain PolicyDefinition (via SnakeYaml, a test-only dependency) is this
@@ -55,20 +61,77 @@ final class ComplianceFixtures {
         }
     }
 
+    /** Parses a raw `rules:` list of `[effect, action, subject, conditions?]` tuples into `Rule`s (SPEC_V1-0-0.md §3.3). */
+    @SuppressWarnings("unchecked")
+    static List<PolicyDefinition.Rule> toRules(List<?> rawRules) {
+        List<PolicyDefinition.Rule> rules = new ArrayList<>();
+        for (Object o : rawRules) {
+            List<?> tuple = (List<?>) o;
+            String effect = String.valueOf(tuple.get(0));
+            String action = String.valueOf(tuple.get(1));
+            String subjectName = String.valueOf(tuple.get(2));
+            Map<String, Object> conditions = tuple.size() > 3 ? (Map<String, Object>) tuple.get(3) : null;
+            rules.add(new PolicyDefinition.Rule(effect, action, subjectName, conditions));
+        }
+        return rules;
+    }
+
+    /**
+     * Parses a raw `meta:` map into a {@link PolicyDefinition.Meta},
+     * preserving the "not declared" vs. "explicitly declared" distinction
+     * for anyAction/anySubject (SPEC_V1-0-0.md §3.2.1) via {@code
+     * containsKey}, since a SnakeYaml-parsed map can tell the two apart
+     * where a plain nullable field can't. Whatever raw value SnakeYaml
+     * parsed for `anyAction`/`anySubject` (a string, {@code null}, {@code
+     * false}, or anything else) is passed straight through to {@code
+     * Meta.Builder}, which applies §3.2.1's four-way dispatch itself (see
+     * {@link com.cptnfizzbin.keycard.policy.WildcardToken#of}).
+     */
+    @SuppressWarnings("unchecked")
+    static PolicyDefinition.Meta toMeta(Map<String, Object> rawMeta) {
+        if (rawMeta == null) return null;
+
+        PolicyDefinition.Meta.Builder builder = PolicyDefinition.Meta.builder();
+        if (rawMeta.containsKey("anyAction")) {
+            builder.anyAction(rawMeta.get("anyAction"));
+        }
+        if (rawMeta.containsKey("anySubject")) {
+            builder.anySubject(rawMeta.get("anySubject"));
+        }
+        if (rawMeta.get("actions") != null) {
+            builder.actions(toStringList((List<?>) rawMeta.get("actions")));
+        }
+        if (rawMeta.get("subjects") != null) {
+            builder.subjects(toStringList((List<?>) rawMeta.get("subjects")));
+        }
+        if (rawMeta.get("operators") != null) {
+            builder.operators(toStringList((List<?>) rawMeta.get("operators")));
+        }
+        if (rawMeta.containsKey("application")) {
+            builder.application(rawMeta.get("application"));
+        }
+        return builder.build();
+    }
+
+    private static List<String> toStringList(List<?> raw) {
+        List<String> result = new ArrayList<>();
+        for (Object o : raw) result.add(String.valueOf(o));
+        return result;
+    }
+
     /**
      * Resolves one {@link TestCase} against a {@link Policy} the same way
-     * every fixture-driven suite does: a bare subject-name check when
-     * there's no instance data (a {@code SubjectDef}-style, EC-7/EC-9
-     * check), or a `{ ...subjectData, __name: subject }` map (mirroring a
-     * {@code SubjectRef}) when there is.
+     * every fixture-driven suite does: a bare Subject (no instance) when
+     * there's no instance data (EC-7/EC-9), or one wrapping
+     * {@code subjectData} as its instance when there is.
      */
     static boolean resolve(Policy policy, TestCase testCase) {
+        Action<String> action = ActionFactory.create(testCase.action());
+        Subject<Map<String, Object>> subject = SubjectFactory.<Map<String, Object>>create(testCase.subject());
         if (testCase.subjectData() != null) {
-            Map<String, Object> subjectMap = new HashMap<>(testCase.subjectData());
-            subjectMap.put("__name", testCase.subject());
-            return policy.can(testCase.action(), subjectMap);
+            subject = subject.wrap(testCase.subjectData());
         }
-        return policy.can(testCase.action(), testCase.subject());
+        return policy.can(action, subject);
     }
 
     /** A parsed MAJOR.MINOR.PATCH SemVer string, per SPEC_V1-0-0.md §2. */

@@ -1,5 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
 
 import java.io.IOException;
@@ -20,20 +21,9 @@ import java.util.Map;
  * plain PolicyDefinition (via SnakeYaml, a test-only dependency) is this
  * test suite's job, mirroring what an application would do.
  *
- * impl/java has not been migrated to the v1 rules/meta schema yet (see
- * KNOWN_ISSUES.md): its PolicyDefinition is still the pre-v1
- * allowRules/denyRules shape, driven by an "allow AND NOT deny" check
- * rather than v1's reverse-scan last-rule-wins, and its wildcard token is
- * hardcoded to "*" rather than reading meta.anyAction/meta.anySubject.
- * {@link #toLegacyDefinition} is a best-effort adapter that reshapes a
- * parsed v1 suite into that pre-v1 shape so this suite can still exercise
- * the current implementation - it does not attempt to emulate
- * last-rule-wins, wildcard tokens, or meta catalogs. Cases that depend on
- * that v1-only behavior are therefore EXPECTED TO FAIL against the current
- * implementation; that gap is what this suite exists to make visible, not
- * a defect in the fixtures. Once impl/java adopts the v1 schema natively,
- * this adapter should be replaced with passing the parsed definition
- * straight through.
+ * impl/java now natively implements the v1 rules/meta schema (see {@link
+ * PolicyDefinition}), so each parsed suite's `rules`/`meta` are handed
+ * straight to a real {@link PolicyDefinition} - no adapter needed.
  *
  * File discovery, YAML parsing, the per-case shape, and can()-resolution
  * are shared with every other compliance suite via {@link ComplianceFixtures}.
@@ -48,8 +38,27 @@ final class V1Fixtures {
         return ComplianceFixtures.discoverYamlFiles(FIXTURES_DIR, p -> true);
     }
 
-    /** One `---`-separated `{ version, name, rules, cases }` document from a fixture file. */
-    record Suite(String version, String name, PolicyDefinition legacyDefinition, List<ComplianceFixtures.TestCase> cases) {}
+    /**
+     * Some v1 conformance suites exercise a custom condition operator,
+     * which - per SPEC_V1-0-0.md §7.4.12 - only the host application (here,
+     * this test suite) can implement; declaring it in meta.operators
+     * documents it but doesn't wire up behavior. Keyed by fixture file name.
+     */
+    static List<Operator> operatorsFor(String fixtureFileName) {
+        if ("11-worked-example.yaml".equals(fixtureFileName)) {
+            // Mirrors the spec Appendix's own suggested implementation:
+            // "one that checks subject.roles.includes('admin')".
+            return List.of(Operator.of("$hasRole", (subject, value, ctx) -> {
+                if (!(subject instanceof Map)) return false;
+                Object roles = ((Map<?, ?>) subject).get("roles");
+                return roles instanceof List && ((List<?>) roles).contains(value);
+            }));
+        }
+        return List.of();
+    }
+
+    /** One `---`-separated `{ version, name, meta?, rules, cases }` document from a fixture file. */
+    record Suite(String version, String name, PolicyDefinition definition, List<ComplianceFixtures.TestCase> cases) {}
 
     @SuppressWarnings("unchecked")
     static List<Suite> loadSuites(Path yamlFile) throws IOException {
@@ -61,18 +70,9 @@ final class V1Fixtures {
             String version = String.valueOf(raw.get("version"));
             String name = (String) raw.get("name");
 
-            List<PolicyDefinition.Rule> allow = new ArrayList<>();
-            List<PolicyDefinition.Rule> deny = new ArrayList<>();
-            for (Object o : (List<?>) raw.get("rules")) {
-                List<?> tuple = (List<?>) o;
-                String effect = String.valueOf(tuple.get(0));
-                String action = String.valueOf(tuple.get(1));
-                String subjectName = String.valueOf(tuple.get(2));
-                Map<String, Object> conditions = tuple.size() > 3 ? (Map<String, Object>) tuple.get(3) : null;
-                PolicyDefinition.Rule rule = new PolicyDefinition.Rule(action, subjectName, conditions);
-                ("allow".equals(effect) ? allow : deny).add(rule);
-            }
-            PolicyDefinition legacyDefinition = new PolicyDefinition(1, name, null, allow, deny);
+            PolicyDefinition.Meta meta = ComplianceFixtures.toMeta((Map<String, Object>) raw.get("meta"));
+            List<PolicyDefinition.Rule> rules = ComplianceFixtures.toRules((List<?>) raw.get("rules"));
+            PolicyDefinition definition = new PolicyDefinition(version, name, null, meta, rules);
 
             List<ComplianceFixtures.TestCase> cases = new ArrayList<>();
             for (Map<String, Object> rc : (List<Map<String, Object>>) raw.get("cases")) {
@@ -91,7 +91,7 @@ final class V1Fixtures {
                 ));
             }
 
-            suites.add(new Suite(version, name, legacyDefinition, cases));
+            suites.add(new Suite(version, name, definition, cases));
         }
 
         return suites;

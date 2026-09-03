@@ -1,6 +1,7 @@
 package com.cptnfizzbin.keycard.integration;
 
 import com.cptnfizzbin.keycard.policy.Policy;
+import com.cptnfizzbin.keycard.version.KeyCardVersion;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -22,8 +23,7 @@ import static org.junit.Assume.assumeTrue;
  * and becomes its own case below. Dropping a new suite, or a new case into
  * an existing suite, adds coverage automatically - no new test code
  * required. See {@link V1Fixtures} and {@link ComplianceFixtures} for the
- * fixture format and the adapter this suite uses to run v1 fixtures
- * against the current, pre-v1 implementation.
+ * fixture format this suite parses each case from.
  *
  * A fixture whose declared `version` isn't covered by
  * {@link #COMPLIANT_VERSION} - this suite's own baked-in ceiling, per
@@ -36,14 +36,18 @@ import static org.junit.Assume.assumeTrue;
 public class V1ConformanceFixtureTest {
 
     /**
-     * The highest v1 SemVer this suite's adapter (see {@link V1Fixtures})
-     * is written against. Baked into the suite itself - rather than left to
-     * whatever an external default happens to be - so "which version this
-     * runs compliant with" is a property of the code: bump it only once the
-     * adapter has actually been updated to handle whatever a newer MINOR
-     * version's fixtures add, not merely because such fixtures exist.
+     * The highest v1 SemVer this suite (and the {@code Policy}
+     * implementation it exercises) is written against - single-sourced
+     * from {@link KeyCardVersion} alongside {@code Policy}'s
+     * {@code SUPPORTED_VERSION} and {@code PolicyBuilder}'s {@code
+     * BUILDER_VERSION}, rather than a separately hand-maintained literal,
+     * so "which version this runs compliant with" can't quietly drift from
+     * what the implementation actually supports. Should the two ever need
+     * to diverge (this suite's adapter lagging a MINOR bump the rest of
+     * the implementation has already picked up), replace this reference
+     * with an explicit, separately-tracked literal.
      */
-    private static final String COMPLIANT_VERSION = "1.0.0";
+    private static final String COMPLIANT_VERSION = KeyCardVersion.KEYCARD_POLICY_VERSION;
 
     @Parameters(name = "{0} > {1} > {2}")
     public static Collection<Object[]> cases() throws IOException {
@@ -60,12 +64,14 @@ public class V1ConformanceFixtureTest {
         return params;
     }
 
+    private final String fixtureName;
     private final V1Fixtures.Suite suite;
     private final ComplianceFixtures.TestCase testCase;
 
     public V1ConformanceFixtureTest(
         String fixtureName, String suiteName, String caseName, V1Fixtures.Suite suite, ComplianceFixtures.TestCase testCase
     ) {
+        this.fixtureName = fixtureName;
         this.suite = suite;
         this.testCase = testCase;
     }
@@ -77,7 +83,7 @@ public class V1ConformanceFixtureTest {
             ComplianceFixtures.isIncluded(suite.version(), COMPLIANT_VERSION)
         );
 
-        Policy policy = Policy.from(suite.legacyDefinition());
+        Policy policy = Policy.from(suite.definition(), V1Fixtures.operatorsFor(fixtureName));
 
         assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }

@@ -1,92 +1,177 @@
 package com.cptnfizzbin.keycard.conditions;
 
-import com.cptnfizzbin.keycard.conditions.numberConditions.NumberConditions;
-import com.cptnfizzbin.keycard.conditions.stringConditions.StringConditions;
-import com.cptnfizzbin.keycard.conditions.groupConditions.GroupConditions;
-import com.cptnfizzbin.keycard.conditions.logicConditions.LogicConditions;
+import com.cptnfizzbin.keycard.errors.PolicyLoadException;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-public final class ConditionResolver {
+/**
+ * Implements SPEC_V1-0-0.md §7: the condition language and its evaluation
+ * semantics. Built-in and custom {@link Operator}s share one registry and
+ * are dispatched identically (§7.4.12) - this class is just the dispatch
+ * loop: it looks a `$`-prefixed key up in that registry and delegates, or
+ * narrows into a bare field name.
+ */
+public final class ConditionResolver implements OperatorContext {
 
+    /** Every `$`-prefixed name {@link DefaultOperators} supplies natively - the single source of truth for "is this name built-in". */
+    public static final Set<String> BUILTIN_OPERATORS = names(DefaultOperators.ALL);
+
+    private final Map<String, Operator> registry;
+
+    public ConditionResolver() {
+        this(null);
+    }
+
+    /**
+     * @param operators custom operators to register alongside {@link DefaultOperators} (§7.4.12) -
+     *   built-in and custom operators share this one collection-based
+     *   entry point. Constructing this with a name collision (a custom
+     *   operator sharing a `$name` with a built-in, or with another
+     *   operator in `operators`) MUST throw a {@link PolicyLoadException}
+     *   immediately - never a silent overwrite (SPEC_V1-0-0.md §3.2.3, EC-16).
+     */
+    public ConditionResolver(Collection<Operator> operators) {
+        this.registry = buildRegistry(operators);
+    }
+
+    /**
+     * §3.2.3, EC-15 (promoted): throws if any name in {@code names} isn't
+     * registered on this resolver - built-in or custom. Used by {@code
+     * Policy} to enforce {@code meta.operators} registration coverage in
+     * full at construction time, regardless of whether any rule actually
+     * reaches a given operator during evaluation.
+     */
+    public void assertAllRegistered(Collection<String> names) {
+        for (String name : names) {
+            if (!registry.containsKey(name)) {
+                throw new PolicyLoadException(
+                    "meta.operators declares \"" + name + "\" but no operator with that name is registered"
+                        + " (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15)."
+                );
+            }
+        }
+    }
+
+    /**
+     * Recursively collects every non-built-in, {@code $}-prefixed operator
+     * name used anywhere in a Conditions tree - used by {@code Policy} to
+     * enforce {@code meta.operators} coverage at construction time (§3.2.3,
+     * EC-13).
+     */
+    public static void collectCustomOperatorNames(Object condition, Set<String> out) {
+        if (!(condition instanceof Map)) return;
+
+        Map<?, ?> map = (Map<?, ?>) condition;
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+
+            if (key.startsWith("$")) {
+                if (!BUILTIN_OPERATORS.contains(key)) out.add(key);
+                if (key.equals("$or") || key.equals("$and")) {
+                    if (value instanceof List) {
+                        for (Object c : (List<?>) value) collectCustomOperatorNames(c, out);
+                    }
+                } else if (key.equals("$not")) {
+                    collectCustomOperatorNames(value, out);
+                } else if (key.equals("$field") && value instanceof List && ((List<?>) value).size() == 2) {
+                    collectCustomOperatorNames(((List<?>) value).get(1), out);
+                }
+            } else {
+                collectCustomOperatorNames(value, out);
+            }
+        }
+    }
+
+    /**
+     * §7.1: {@code evaluate} always returns a boolean and SHOULD NOT throw
+     * for any well-formed condition, regardless of what the subject is.
+     */
     public boolean evaluate(Object subject, Object condition) {
-        if (condition == null) {
-            return true;
+        if (condition == null || condition instanceof String || condition instanceof Number || condition instanceof Boolean) {
+            // §7.2: bare-value shorthand for $eq (including explicit null - §7.3, not a wildcard).
+            return StringConditions.eq(subject, condition);
         }
 
         if (!(condition instanceof Map)) {
-            return subject != null && subject.equals(condition);
+            return false;
         }
 
-        Map<String, Object> condMap = (Map<String, Object>) condition;
-
-        for (Map.Entry<String, Object> entry : condMap.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-
-            switch (key) {
-                case "$eq":
-                    if (!StringConditions.eq(subject, value)) return false;
-                    break;
-                case "$ne":
-                    if (!StringConditions.ne(subject, value)) return false;
-                    break;
-                case "$gt":
-                    if (!(subject instanceof Number) || !(value instanceof Number)) return false;
-                    if (!NumberConditions.gt((Number) subject, (Number) value)) return false;
-                    break;
-                case "$gte":
-                    if (!(subject instanceof Number) || !(value instanceof Number)) return false;
-                    if (!NumberConditions.gte((Number) subject, (Number) value)) return false;
-                    break;
-                case "$lt":
-                    if (!(subject instanceof Number) || !(value instanceof Number)) return false;
-                    if (!NumberConditions.lt((Number) subject, (Number) value)) return false;
-                    break;
-                case "$lte":
-                    if (!(subject instanceof Number) || !(value instanceof Number)) return false;
-                    if (!NumberConditions.lte((Number) subject, (Number) value)) return false;
-                    break;
-                case "$in":
-                    if (!GroupConditions.in(subject, value)) return false;
-                    break;
-                case "$has":
-                    if (!GroupConditions.has(subject, value)) return false;
-                    break;
-                case "$rgx":
-                    if (!StringConditions.rgx(subject, value)) return false;
-                    break;
-                case "$or":
-                    if (!LogicConditions.or(this, subject, value)) return false;
-                    break;
-                case "$and":
-                    if (!LogicConditions.and(this, subject, value)) return false;
-                    break;
-                case "$not":
-                    if (!LogicConditions.not(this, subject, value)) return false;
-                    break;
-                default:
-                    if (key.startsWith("$")) {
-                        return false;
-                    }
-                    if (subject instanceof Map) {
-                        Object subjectValue = ((Map<?, ?>) subject).get(key);
-                        if (!evaluate(subjectValue, value)) return false;
-                    } else if (subject == null) {
-                        return false;
-                    } else {
-                        try {
-                            java.lang.reflect.Field field = subject.getClass().getDeclaredField(key);
-                            field.setAccessible(true);
-                            Object subjectValue = field.get(subject);
-                            if (!evaluate(subjectValue, value)) return false;
-                        } catch (NoSuchFieldException | IllegalAccessException e) {
-                            return false;
-                        }
-                    }
+        Map<?, ?> condMap = (Map<?, ?>) condition;
+        // §7.5: every key MUST be evaluated and ANDed together - no key may
+        // "consume" the whole object or cause sibling keys to be ignored.
+        for (Map.Entry<?, ?> entry : condMap.entrySet()) {
+            if (!evaluateKey(subject, String.valueOf(entry.getKey()), entry.getValue())) {
+                return false;
             }
         }
         return true;
+    }
+
+    @Override
+    public boolean resolveSubcondition(Object subject, Object condition) {
+        return evaluate(subject, condition);
+    }
+
+    /**
+     * §7.4.12, §7.5: any key starting with "$" is an operator lookup, never
+     * a field name - built-in and custom operators are both resolved the
+     * same way, by name, against the same registry.
+     */
+    private boolean evaluateKey(Object subject, String key, Object value) {
+        if (!key.startsWith("$")) {
+            return fieldCheck(subject, key, value);
+        }
+
+        Operator operator = registry.get(key);
+        if (operator == null) {
+            // §7.4.12, EC-13: an operator with no checker registered (built-in
+            // or custom) MUST evaluate to false - never a no-op true, and
+            // never treated as a field name. Not itself a required §7.1
+            // diagnostic - and, unlike before, a cataloged-but-unregistered
+            // name (EC-15) can no longer even reach this branch: `Policy`
+            // now enforces meta.operators registration at construction time,
+            // so any name still unregistered here was never cataloged.
+            return false;
+        }
+
+        return operator.resolve(subject, value, this);
+    }
+
+    /** §7.4.10, §7.3: a missing field (or a non-object subject) makes the whole field-condition false - absence, not a type issue. */
+    private boolean fieldCheck(Object subject, String fieldName, Object condition) {
+        return FieldAccess.check(subject, fieldName, condition, this);
+    }
+
+    private static Map<String, Operator> buildRegistry(Collection<Operator> custom) {
+        Map<String, Operator> map = new LinkedHashMap<>();
+        for (Operator op : DefaultOperators.ALL) {
+            map.put(op.name(), op);
+        }
+        if (custom != null) {
+            for (Operator op : custom) {
+                if (map.containsKey(op.name())) {
+                    throw new PolicyLoadException(
+                        "Duplicate operator \"" + op.name() + "\": an operator with this name is already registered"
+                            + " (built-in or custom) - operator names MUST be unique (SPEC_V1-0-0.md §3.2.3, EC-16)."
+                    );
+                }
+                map.put(op.name(), op);
+            }
+        }
+        return Map.copyOf(map);
+    }
+
+    private static Set<String> names(Collection<Operator> operators) {
+        Set<String> names = new LinkedHashSet<>();
+        for (Operator op : operators) {
+            names.add(op.name());
+        }
+        return Set.copyOf(names);
     }
 }

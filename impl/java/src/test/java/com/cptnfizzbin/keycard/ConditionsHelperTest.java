@@ -8,7 +8,7 @@ import com.cptnfizzbin.keycard.policy.Policy;
 import com.cptnfizzbin.keycard.builder.PolicyBuilder;
 import com.cptnfizzbin.keycard.action.Action;
 import com.cptnfizzbin.keycard.action.ActionFactory;
-import com.cptnfizzbin.keycard.subject.SubjectDef;
+import com.cptnfizzbin.keycard.subject.Subject;
 import com.cptnfizzbin.keycard.subject.SubjectFactory;
 import com.cptnfizzbin.keycard.conditions.Conditions;
 
@@ -29,7 +29,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testFieldEquality() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> update = ActionFactory.create("Update");
 
         Policy policy = new PolicyBuilder()
@@ -45,7 +45,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testFieldNotEqual() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> update = ActionFactory.create("Update");
 
         Policy policy = new PolicyBuilder()
@@ -61,7 +61,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testNumberComparison() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> delete = ActionFactory.create("Delete");
 
         Policy policy = new PolicyBuilder()
@@ -77,7 +77,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testAndCondition() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> update = ActionFactory.create("Update");
 
         Map<String, Object> conditions = Conditions.and(
@@ -101,7 +101,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testOrCondition() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> publish = ActionFactory.create("Publish");
 
         Map<String, Object> conditions = Conditions.or(
@@ -125,7 +125,7 @@ public class ConditionsHelperTest {
 
     @Test
     public void testAndCondition2() {
-        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Subject<Article> article = SubjectFactory.create("Article");
         Action<String> update = ActionFactory.create("Update");
 
         Map<String, Object> conditions = Conditions.and(
