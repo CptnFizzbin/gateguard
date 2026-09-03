@@ -70,10 +70,11 @@ public final class Conditions {
         return condition;
     }
 
-    public static <T, R> Map<String, Object> rgx(FieldGetter<T, R> getter, String pattern) {
+    /** §7.4.6: $substr - a small, non-regex substring pattern language. */
+    public static <T, R> Map<String, Object> substr(FieldGetter<T, R> getter, String pattern) {
         String fieldName = extractFieldName(getter);
         Map<String, Object> condition = new HashMap<>();
-        condition.put(fieldName, Map.of("$rgx", pattern));
+        condition.put(fieldName, Map.of("$substr", pattern));
         return condition;
     }
 

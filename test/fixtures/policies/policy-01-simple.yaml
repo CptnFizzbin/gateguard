@@ -1,9 +1,7 @@
-version: 1
+version: "1.0.0"
 name: "Simple Blog Policy"
 description: "Basic CRUD operations on blog articles"
 
-allow:
-  - [Read, Article]
-  - [Create, Article, { owner_id: 1 }]
-
-deny: []
+rules:
+  - [allow, Read, Article]
+  - [allow, Create, Article, { owner_id: 1 }]

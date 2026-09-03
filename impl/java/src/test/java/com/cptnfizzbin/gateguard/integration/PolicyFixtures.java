@@ -1,5 +1,6 @@
 package com.cptnfizzbin.gateguard.integration;
 
+import com.cptnfizzbin.gateguard.conditions.Operator;
 import com.cptnfizzbin.gateguard.policy.PolicyDefinition;
 
 import java.io.IOException;
@@ -16,7 +17,8 @@ import java.util.Map;
  *
  * GateGuard itself never reads or writes policy.yaml text; parsing it into a
  * plain PolicyDefinition (via SnakeYaml, a test-only dependency) is this
- * test suite's job, mirroring what an application would do.
+ * test suite's job, mirroring what an application would do. The on-disk
+ * shape is the v1 rules/meta schema, per SPEC_V1-0-0.md §3.
  *
  * File discovery, YAML parsing, and the per-case shape are shared with
  * every other compliance suite via {@link ComplianceFixtures}.
@@ -25,6 +27,21 @@ final class PolicyFixtures {
     private PolicyFixtures() {}
 
     static final Path FIXTURES_DIR = Paths.get("../../test/fixtures/policies");
+
+    /**
+     * Some fixture policies exercise a custom condition operator, which -
+     * per SPEC_V1-0-0.md §7.4.12 - only the host application (here, this
+     * test suite) can implement; declaring it in meta.operators documents
+     * it but doesn't wire up behavior. Keyed by fixture file name.
+     */
+    static List<Operator> operatorsFor(String fixtureFileName) {
+        if ("policy-05-advanced.yaml".equals(fixtureFileName)) {
+            return List.of(Operator.of("$startsWithUpper", (subject, value, ctx) ->
+                subject instanceof String && !((String) subject).isEmpty()
+                    && Character.isUpperCase(((String) subject).charAt(0))));
+        }
+        return List.of();
+    }
 
     /** All `policy-*.yaml` fixtures (excluding their `.test.yaml` companions), sorted by name. */
     static List<Path> discoverPolicyFiles() throws IOException {
@@ -43,27 +60,13 @@ final class PolicyFixtures {
         String content = Files.readString(yamlFile);
         Map<String, Object> raw = ComplianceFixtures.YAML.load(content);
 
-        int version = raw.get("version") != null ? ((Number) raw.get("version")).intValue() : 1;
+        String version = String.valueOf(raw.get("version"));
         String name = (String) raw.get("name");
         String description = (String) raw.get("description");
+        PolicyDefinition.Meta meta = ComplianceFixtures.toMeta((Map<String, Object>) raw.get("meta"));
+        List<PolicyDefinition.Rule> rules = ComplianceFixtures.toRules((List<?>) raw.getOrDefault("rules", List.of()));
 
-        List<PolicyDefinition.Rule> allow = toRules((List<?>) raw.getOrDefault("allow", List.of()));
-        List<PolicyDefinition.Rule> deny = toRules((List<?>) raw.getOrDefault("deny", List.of()));
-
-        return new PolicyDefinition(version, name, description, allow, deny);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<PolicyDefinition.Rule> toRules(List<?> rawRules) {
-        List<PolicyDefinition.Rule> rules = new ArrayList<>();
-        for (Object o : rawRules) {
-            List<?> tuple = (List<?>) o;
-            String action = String.valueOf(tuple.get(0));
-            String subjectName = String.valueOf(tuple.get(1));
-            Map<String, Object> conditions = tuple.size() > 2 ? (Map<String, Object>) tuple.get(2) : null;
-            rules.add(new PolicyDefinition.Rule(action, subjectName, conditions));
-        }
-        return rules;
+        return new PolicyDefinition(version, name, description, meta, rules);
     }
 
     @SuppressWarnings("unchecked")
