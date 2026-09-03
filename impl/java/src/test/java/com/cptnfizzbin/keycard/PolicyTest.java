@@ -11,10 +11,12 @@ import com.cptnfizzbin.keycard.action.ActionFactory;
 import com.cptnfizzbin.keycard.subject.SubjectDef;
 import com.cptnfizzbin.keycard.subject.SubjectFactory;
 import com.cptnfizzbin.keycard.conditions.Conditions;
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.errors.PolicyException;
 
 import static org.junit.Assert.*;
 
+import java.util.List;
 import java.util.Map;
 
 public class PolicyTest {
@@ -127,5 +129,60 @@ public class PolicyTest {
             .build();
 
         assertTrue(policy.can(delete, article));
+    }
+
+    /**
+     * Issue 6: `allow`/`deny`/`can`/`cannot`/`require` all accept every
+     * combination of `String`/`Action<?>` (action) and `String`/`SubjectDef<?>`/
+     * `SubjectRef<?>` (subject) - not just the `Action<?>`+`SubjectDef<?>`/
+     * `SubjectRef<?>` combinations the builder previously supported.
+     */
+    @Test
+    public void everyActionAndSubjectShapeCombinationIsAccepted() {
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Action<String> update = ActionFactory.create("Update");
+
+        Policy policy = new PolicyBuilder()
+            .allow("Read", "Article")
+            .allow("Create", article)
+            .allow(update, "Article")
+            .allow(update, article, Conditions.eq(Article::getOwnerId, 42))
+            .build();
+
+        assertTrue(policy.can("Read", "Article"));
+        assertTrue(policy.can("Read", article));
+        assertTrue(policy.can(ActionFactory.create("Read"), "Article"));
+        assertTrue(policy.can(ActionFactory.create("Read"), article));
+
+        assertTrue(policy.can("Create", article));
+        assertTrue(policy.can(update, "Article"));
+
+        Article owned = new Article(1, 42, "published");
+        assertTrue(policy.can("Update", article.wrap(owned)));
+        assertTrue(policy.can(update, article.wrap(owned)));
+
+        assertFalse(policy.cannot("Read", "Article"));
+        policy.require("Read", "Article"); // should not throw
+    }
+
+    /**
+     * Issue 1: a custom operator supplied to {@code PolicyBuilder} carries
+     * through {@code build()} into the constructed {@code Policy} - a
+     * builder-produced definition doesn't need its operators re-supplied
+     * separately at {@code Policy.from(...)}.
+     */
+    @Test
+    public void builderSuppliedOperatorsCarryThroughToTheBuiltPolicy() {
+        SubjectDef<Article> article = SubjectFactory.create("Article", Article.class);
+        Action<String> delete = ActionFactory.create("Delete");
+
+        Policy policy = new PolicyBuilder(List.of(
+            Operator.of("$hasRole", (subject, value, ctx) -> "admin".equals(value))
+        ))
+            .deny(delete, article)
+            .allow(delete, article, Map.of("$hasRole", "admin"))
+            .build();
+
+        assertTrue(policy.can(delete, article.wrap(new Article(1, 1, "published"))));
     }
 }

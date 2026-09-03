@@ -1,6 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
-import com.cptnfizzbin.keycard.conditions.ConditionChecker;
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
 
 import java.io.IOException;
@@ -31,16 +31,16 @@ final class PolicyFixtures {
     /**
      * Some fixture policies exercise a custom condition operator, which -
      * per SPEC_V1-0-0.md §7.4.12 - only the host application (here, this
-     * test suite) can implement; declaring it in meta.customOperators
-     * documents it but doesn't wire up behavior. Keyed by fixture file name.
+     * test suite) can implement; declaring it in meta.operators documents
+     * it but doesn't wire up behavior. Keyed by fixture file name.
      */
-    static Map<String, ConditionChecker> checkersFor(String fixtureFileName) {
+    static List<Operator> operatorsFor(String fixtureFileName) {
         if ("policy-05-advanced.yaml".equals(fixtureFileName)) {
-            return Map.of("$startsWithUpper", (subject, value) ->
+            return List.of(Operator.of("$startsWithUpper", (subject, value, ctx) ->
                 subject instanceof String && !((String) subject).isEmpty()
-                    && Character.isUpperCase(((String) subject).charAt(0)));
+                    && Character.isUpperCase(((String) subject).charAt(0))));
         }
-        return Map.of();
+        return List.of();
     }
 
     /** All `policy-*.yaml` fixtures (excluding their `.test.yaml` companions), sorted by name. */

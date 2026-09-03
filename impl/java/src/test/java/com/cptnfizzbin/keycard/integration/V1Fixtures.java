@@ -1,5 +1,6 @@
 package com.cptnfizzbin.keycard.integration;
 
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.policy.PolicyDefinition;
 
 import java.io.IOException;
@@ -35,6 +36,25 @@ final class V1Fixtures {
     /** All `*.yaml` fixture files under test/fixtures/v1, sorted by name. */
     static List<Path> discoverFixtureFiles() throws IOException {
         return ComplianceFixtures.discoverYamlFiles(FIXTURES_DIR, p -> true);
+    }
+
+    /**
+     * Some v1 conformance suites exercise a custom condition operator,
+     * which - per SPEC_V1-0-0.md §7.4.12 - only the host application (here,
+     * this test suite) can implement; declaring it in meta.operators
+     * documents it but doesn't wire up behavior. Keyed by fixture file name.
+     */
+    static List<Operator> operatorsFor(String fixtureFileName) {
+        if ("11-worked-example.yaml".equals(fixtureFileName)) {
+            // Mirrors the spec Appendix's own suggested implementation:
+            // "one that checks subject.roles.includes('admin')".
+            return List.of(Operator.of("$hasRole", (subject, value, ctx) -> {
+                if (!(subject instanceof Map)) return false;
+                Object roles = ((Map<?, ?>) subject).get("roles");
+                return roles instanceof List && ((List<?>) roles).contains(value);
+            }));
+        }
+        return List.of();
     }
 
     /** One `---`-separated `{ version, name, meta?, rules, cases }` document from a fixture file. */

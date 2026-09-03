@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
 import com.cptnfizzbin.keycard.conditions.Conditions;
+import com.cptnfizzbin.keycard.conditions.Operator;
 
 import java.util.List;
 import java.util.Map;
@@ -76,5 +77,34 @@ public class ConditionResolverTest {
 
         assertTrue(resolver.evaluate(article, Map.of("owner", Map.of("name", Map.of("$ne", "frank")))));
         assertFalse(resolver.evaluate(article, Map.of("owner", Map.of("name", Map.of("$ne", "james")))));
+    }
+
+    /**
+     * Issue 2: a custom operator receives an {@link com.cptnfizzbin.keycard.conditions.OperatorContext}
+     * that lets it recurse into the condition language exactly like the
+     * built-in $and/$or/$not do - here, a custom "$every" operator
+     * (re-implementing $and via resolveSubcondition) over a fixed subject.
+     */
+    @Test
+    public void customOperatorCanRecurseViaOperatorContext() {
+        ConditionResolver withCustom = new ConditionResolver(List.of(
+            Operator.of("$every", (subject, value, ctx) -> {
+                for (Object condition : (List<?>) value) {
+                    if (!ctx.resolveSubcondition(subject, condition)) return false;
+                }
+                return true;
+            })
+        ));
+
+        Map<String, Object> article = Map.of("ownerId", 42, "status", "draft");
+
+        assertTrue(withCustom.evaluate(article, Map.of("$every", List.of(
+            Map.of("ownerId", 42),
+            Map.of("status", "draft")
+        ))));
+        assertFalse(withCustom.evaluate(article, Map.of("$every", List.of(
+            Map.of("ownerId", 42),
+            Map.of("status", "published")
+        ))));
     }
 }

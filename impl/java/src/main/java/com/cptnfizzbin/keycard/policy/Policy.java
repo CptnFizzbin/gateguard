@@ -4,11 +4,12 @@ import com.cptnfizzbin.keycard.action.Action;
 import com.cptnfizzbin.keycard.subject.SubjectDef;
 import com.cptnfizzbin.keycard.subject.SubjectRef;
 import com.cptnfizzbin.keycard.conditions.ConditionResolver;
-import com.cptnfizzbin.keycard.conditions.ConditionChecker;
+import com.cptnfizzbin.keycard.conditions.Operator;
 import com.cptnfizzbin.keycard.errors.PolicyException;
 import com.cptnfizzbin.keycard.errors.PolicyLoadException;
 import com.cptnfizzbin.keycard.errors.PolicyVersionException;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,28 +29,33 @@ public final class Policy {
     private final ConditionResolver resolver;
 
     public Policy(PolicyDefinition definition) {
-        this(definition, (Map<String, ConditionChecker>) null);
+        this(definition, (Collection<Operator>) null);
     }
 
-    public Policy(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
+    /**
+     * @param operators custom operators to register alongside the
+     *   built-ins (SPEC_V1-0-0.md §7.4.12) - a single collection-based
+     *   entry point shared with {@code PolicyBuilder}, so a
+     *   builder-produced definition can carry its operators through
+     *   consistently.
+     */
+    public Policy(PolicyDefinition definition, Collection<Operator> operators) {
         validateVersion(definition.getVersion());
-        validateRules(definition);
 
         this.definition = definition;
-        PolicyDefinition.Meta meta = definition.getMeta();
-        Set<String> declaredCustomOperators = meta != null && meta.getCustomOperators() != null
-            ? new HashSet<>(meta.getCustomOperators())
-            : null;
-        this.resolver = new ConditionResolver(checkers, declaredCustomOperators);
+        this.resolver = new ConditionResolver(operators);
+        validateOperatorsRegistered(definition, resolver);
+        validateRules(definition);
     }
 
     /** Advanced escape hatch: supply an already-built {@link ConditionResolver} directly. */
     public Policy(PolicyDefinition definition, ConditionResolver resolver) {
         validateVersion(definition.getVersion());
-        validateRules(definition);
 
         this.definition = definition;
         this.resolver = resolver != null ? resolver : new ConditionResolver();
+        validateOperatorsRegistered(definition, this.resolver);
+        validateRules(definition);
     }
 
     /**
@@ -62,8 +68,8 @@ public final class Policy {
         return new Policy(definition);
     }
 
-    public static Policy from(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
-        return new Policy(definition, checkers);
+    public static Policy from(PolicyDefinition definition, Collection<Operator> operators) {
+        return new Policy(definition, operators);
     }
 
     public static Policy from(PolicyDefinition definition, ConditionResolver resolver) {
@@ -75,9 +81,9 @@ public final class Policy {
         return from(definition);
     }
 
-    /** Alias of {@link #from(PolicyDefinition, Map)}. */
-    public static Policy fromDto(PolicyDefinition definition, Map<String, ConditionChecker> checkers) {
-        return from(definition, checkers);
+    /** Alias of {@link #from(PolicyDefinition, Collection)}. */
+    public static Policy fromDto(PolicyDefinition definition, Collection<Operator> operators) {
+        return from(definition, operators);
     }
 
     /** Alias of {@link #from(PolicyDefinition, ConditionResolver)}. */
@@ -99,15 +105,13 @@ public final class Policy {
         return toDefinition();
     }
 
-    /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
-    public <T> boolean can(Action<?> action, SubjectDef<T> subject) {
-        return checkPermission(action.getName(), subject.getName(), false, null);
-    }
-
-    /** A wrapped-instance check - conditional rules are eligible. */
-    public <T> boolean can(Action<?> action, SubjectRef<T> subject) {
-        return checkPermission(action.getName(), subject.getName(), true, subject.getValue());
-    }
+    // --- can(...) ---------------------------------------------------------
+    // Every combination of `action: String | Action<?>` and
+    // `subject: String | SubjectDef<?> | SubjectRef<?>` is supported, per
+    // the unified action/subject parameter contract shared with `allow`/
+    // `deny`/`cannot`/`require` - all six forward to `checkPermission`
+    // below. `can(String, Object)` additionally covers a raw instance value
+    // (e.g. a POJO or a Map) whose subject name is inferred from it.
 
     /** A bare-type-name check (no instance). */
     public boolean can(String action, String subject) {
@@ -120,13 +124,31 @@ public final class Policy {
         return checkPermission(action, subjectName, true, subject);
     }
 
-    public <T> boolean cannot(Action<?> action, SubjectDef<T> subject) {
-        return !can(action, subject);
+    /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
+    public boolean can(String action, SubjectDef<?> subject) {
+        return checkPermission(action, subject.getName(), false, null);
     }
 
-    public <T> boolean cannot(Action<?> action, SubjectRef<T> subject) {
-        return !can(action, subject);
+    /** A wrapped-instance check - conditional rules are eligible. */
+    public boolean can(String action, SubjectRef<?> subject) {
+        return checkPermission(action, subject.getName(), true, subject.getValue());
     }
+
+    public boolean can(Action<?> action, String subject) {
+        return checkPermission(action.getName(), subject, false, null);
+    }
+
+    /** A bare-type check (no instance) - EC-7/EC-9: a conditional rule can never match this. */
+    public boolean can(Action<?> action, SubjectDef<?> subject) {
+        return checkPermission(action.getName(), subject.getName(), false, null);
+    }
+
+    /** A wrapped-instance check - conditional rules are eligible. */
+    public boolean can(Action<?> action, SubjectRef<?> subject) {
+        return checkPermission(action.getName(), subject.getName(), true, subject.getValue());
+    }
+
+    // --- cannot(...) --------------------------------------------------------
 
     public boolean cannot(String action, String subject) {
         return !can(action, subject);
@@ -136,15 +158,59 @@ public final class Policy {
         return !can(action, subject);
     }
 
-    public <T> void require(Action<?> action, SubjectDef<T> subject) throws PolicyException {
-        if (!can(action, subject)) {
-            throw new PolicyException("Access denied: cannot " + action.getName() + " on " + subject.getName());
-        }
+    public boolean cannot(String action, SubjectDef<?> subject) {
+        return !can(action, subject);
     }
 
-    public <T> void require(Action<?> action, SubjectRef<T> subject) throws PolicyException {
-        if (!can(action, subject)) {
-            throw new PolicyException("Access denied: cannot " + action.getName() + " on " + subject.getName());
+    public boolean cannot(String action, SubjectRef<?> subject) {
+        return !can(action, subject);
+    }
+
+    public boolean cannot(Action<?> action, String subject) {
+        return !can(action, subject);
+    }
+
+    public boolean cannot(Action<?> action, SubjectDef<?> subject) {
+        return !can(action, subject);
+    }
+
+    public boolean cannot(Action<?> action, SubjectRef<?> subject) {
+        return !can(action, subject);
+    }
+
+    // --- require(...) --------------------------------------------------------
+
+    public void require(String action, String subject) throws PolicyException {
+        requireCan(can(action, subject), action, subject);
+    }
+
+    public void require(String action, Object subject) throws PolicyException {
+        requireCan(can(action, subject), action, subject);
+    }
+
+    public void require(String action, SubjectDef<?> subject) throws PolicyException {
+        requireCan(can(action, subject), action, subject.getName());
+    }
+
+    public void require(String action, SubjectRef<?> subject) throws PolicyException {
+        requireCan(can(action, subject), action, subject.getName());
+    }
+
+    public void require(Action<?> action, String subject) throws PolicyException {
+        requireCan(can(action, subject), action.getName(), subject);
+    }
+
+    public void require(Action<?> action, SubjectDef<?> subject) throws PolicyException {
+        requireCan(can(action, subject), action.getName(), subject.getName());
+    }
+
+    public void require(Action<?> action, SubjectRef<?> subject) throws PolicyException {
+        requireCan(can(action, subject), action.getName(), subject.getName());
+    }
+
+    private static void requireCan(boolean allowed, String action, Object subject) throws PolicyException {
+        if (!allowed) {
+            throw new PolicyException("Access denied: cannot " + action + " on " + subject);
         }
     }
 
@@ -158,8 +224,8 @@ public final class Policy {
      */
     private boolean checkPermission(String action, String subjectName, boolean hasInstance, Object subjectValue) {
         PolicyDefinition.Meta meta = definition.getMeta();
-        String anyAction = Wildcards.effectiveAnyAction(meta);
-        String anySubject = Wildcards.effectiveAnySubject(meta);
+        WildcardToken anyAction = Wildcards.effectiveAnyAction(meta);
+        WildcardToken anySubject = Wildcards.effectiveAnySubject(meta);
         List<PolicyDefinition.Rule> rules = definition.getRules();
 
         for (int i = rules.size() - 1; i >= 0; i--) {
@@ -209,14 +275,38 @@ public final class Policy {
         }
     }
 
+    /**
+     * §3.2.3, EC-15 (promoted): when {@code meta.operators} is declared,
+     * every name it lists MUST already be registered on this Policy - built
+     * -in or custom - checked once here at construction time, regardless of
+     * whether any rule actually reaches that operator during evaluation.
+     * This replaces the previous behavior of deferring an unregistered-but
+     * -cataloged name to a runtime-only diagnostic.
+     */
+    private static void validateOperatorsRegistered(PolicyDefinition definition, ConditionResolver resolver) {
+        PolicyDefinition.Meta meta = definition.getMeta();
+        List<String> declared = meta != null ? meta.getOperators() : null;
+        if (declared == null) return;
+
+        Set<String> registered = resolver.registeredOperatorNames();
+        for (String name : declared) {
+            if (!registered.contains(name)) {
+                throw new PolicyLoadException(
+                    "meta.operators declares \"" + name + "\" but no operator with that name is registered"
+                        + " (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15)."
+                );
+            }
+        }
+    }
+
     private static void validateRules(PolicyDefinition definition) {
         PolicyDefinition.Meta meta = definition.getMeta();
-        String anyAction = Wildcards.effectiveAnyAction(meta);
-        String anySubject = Wildcards.effectiveAnySubject(meta);
+        WildcardToken anyAction = Wildcards.effectiveAnyAction(meta);
+        WildcardToken anySubject = Wildcards.effectiveAnySubject(meta);
 
         Set<String> actionsCatalog = meta != null && meta.getActions() != null ? new HashSet<>(meta.getActions()) : null;
         Set<String> subjectsCatalog = meta != null && meta.getSubjects() != null ? new HashSet<>(meta.getSubjects()) : null;
-        Set<String> customOpCatalog = meta != null && meta.getCustomOperators() != null ? new HashSet<>(meta.getCustomOperators()) : null;
+        Set<String> operatorsCatalog = meta != null && meta.getOperators() != null ? new HashSet<>(meta.getOperators()) : null;
 
         for (PolicyDefinition.Rule rule : definition.getRules()) {
             String effect = rule.getEffect();
@@ -237,8 +327,8 @@ public final class Policy {
                 throw new PolicyLoadException("Malformed rule tuple: subject is required (SPEC_V1-0-0.md §3.3, EC-10).");
             }
 
-            boolean isWildcardAction = anyAction != null && action.equals(anyAction);
-            boolean isWildcardSubject = anySubject != null && subjectName.equals(anySubject);
+            boolean isWildcardAction = anyAction instanceof WildcardToken.Named named && action.equals(named.token());
+            boolean isWildcardSubject = anySubject instanceof WildcardToken.Named named && subjectName.equals(named.token());
 
             if (isWildcardAction && isWildcardSubject && conditions != null) {
                 throw new PolicyLoadException(
@@ -259,13 +349,13 @@ public final class Policy {
                 );
             }
 
-            if (customOpCatalog != null && conditions != null) {
+            if (operatorsCatalog != null && conditions != null) {
                 Set<String> used = new HashSet<>();
                 CustomOperators.collect(conditions, used);
                 for (String op : used) {
-                    if (!customOpCatalog.contains(op)) {
+                    if (!operatorsCatalog.contains(op)) {
                         throw new PolicyLoadException(
-                            "Rule uses custom operator \"" + op + "\" not covered by meta.customOperators (SPEC_V1-0-0.md §3.2.3, EC-13)."
+                            "Rule uses custom operator \"" + op + "\" not covered by meta.operators (SPEC_V1-0-0.md §3.2.3, EC-13)."
                         );
                     }
                 }

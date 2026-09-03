@@ -75,10 +75,14 @@ final class ComplianceFixtures {
 
     /**
      * Parses a raw `meta:` map into a {@link PolicyDefinition.Meta},
-     * preserving the "not declared" vs. "explicitly null" distinction for
-     * anyAction/anySubject (SPEC_V1-0-0.md §3.2.1) via {@code
+     * preserving the "not declared" vs. "explicitly declared" distinction
+     * for anyAction/anySubject (SPEC_V1-0-0.md §3.2.1) via {@code
      * containsKey}, since a SnakeYaml-parsed map can tell the two apart
-     * where a plain nullable field can't.
+     * where a plain nullable field can't. Whatever raw value SnakeYaml
+     * parsed for `anyAction`/`anySubject` (a string, {@code null}, {@code
+     * false}, or anything else) is passed straight through to {@code
+     * Meta.Builder}, which applies §3.2.1's four-way dispatch itself (see
+     * {@link com.cptnfizzbin.keycard.policy.WildcardToken#of}).
      */
     @SuppressWarnings("unchecked")
     static PolicyDefinition.Meta toMeta(Map<String, Object> rawMeta) {
@@ -86,10 +90,10 @@ final class ComplianceFixtures {
 
         PolicyDefinition.Meta.Builder builder = PolicyDefinition.Meta.builder();
         if (rawMeta.containsKey("anyAction")) {
-            builder.anyAction((String) rawMeta.get("anyAction"));
+            builder.anyAction(rawMeta.get("anyAction"));
         }
         if (rawMeta.containsKey("anySubject")) {
-            builder.anySubject((String) rawMeta.get("anySubject"));
+            builder.anySubject(rawMeta.get("anySubject"));
         }
         if (rawMeta.get("actions") != null) {
             builder.actions(toStringList((List<?>) rawMeta.get("actions")));
@@ -97,8 +101,8 @@ final class ComplianceFixtures {
         if (rawMeta.get("subjects") != null) {
             builder.subjects(toStringList((List<?>) rawMeta.get("subjects")));
         }
-        if (rawMeta.get("customOperators") != null) {
-            builder.customOperators(toStringList((List<?>) rawMeta.get("customOperators")));
+        if (rawMeta.get("operators") != null) {
+            builder.operators(toStringList((List<?>) rawMeta.get("operators")));
         }
         if (rawMeta.containsKey("application")) {
             builder.application(rawMeta.get("application"));

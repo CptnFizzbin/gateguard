@@ -1,31 +1,46 @@
 package com.cptnfizzbin.keycard.conditions;
 
 /**
- * A named, built-in condition-operator implementation - pairs a
- * `$`-prefixed operator name with the function that implements it, so the
- * two travel together as one reusable constant (see {@link
- * DefaultOperators}) instead of being assembled ad hoc at each call site.
+ * A single `$`-prefixed condition operator (SPEC_V1-0-0.md §7.4) - built-in
+ * or custom. Both are the exact same type and are registered, looked up,
+ * and dispatched identically (§7.4.12): {@link DefaultOperators} supplies
+ * one {@code Operator} per built-in, and a host application supplies its
+ * own for a custom `$op` the same way, via whatever collection it passes
+ * to {@code Policy}/{@code PolicyBuilder}/{@link ConditionResolver}. There
+ * is deliberately no separate "custom checker" type - unifying the two
+ * closes the capability gap a flat {@code (subject, value) -> boolean}
+ * checker had: every {@code Operator}, custom ones included, receives an
+ * {@link OperatorContext} letting it recurse into the condition language.
  */
-final class Operator {
-    private final String name;
-    private final Impl impl;
+public interface Operator {
+    /** The `$`-prefixed name this operator is registered under (e.g. `"$eq"`, `"$hasRole"`). */
+    String name();
 
-    Operator(String name, Impl impl) {
-        this.name = name;
-        this.impl = impl;
+    /**
+     * Evaluates this operator against `subject`/`value`. `ctx` lets the
+     * implementation recurse into the condition language via {@link
+     * OperatorContext#resolveSubcondition} - exactly what a custom
+     * operator needs to implement something like `$and`/`$or` itself.
+     */
+    boolean resolve(Object subject, Object value, OperatorContext ctx);
+
+    /** Builds an {@code Operator} from a name and a {@link Resolver} - the common case, for both built-ins and custom operators alike. */
+    static Operator of(String name, Resolver resolver) {
+        return new Operator() {
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public boolean resolve(Object subject, Object value, OperatorContext ctx) {
+                return resolver.resolve(subject, value, ctx);
+            }
+        };
     }
 
-    String name() {
-        return name;
-    }
-
-    Impl impl() {
-        return impl;
-    }
-
-    /** An operator's implementation - takes the resolving instance (for recursive evaluate() calls and diagnostics) plus the subject/operand. */
     @FunctionalInterface
-    interface Impl {
-        boolean check(ConditionResolver resolver, Object subject, Object value);
+    interface Resolver {
+        boolean resolve(Object subject, Object value, OperatorContext ctx);
     }
 }

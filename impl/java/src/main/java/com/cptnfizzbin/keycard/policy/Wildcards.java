@@ -7,28 +7,27 @@ package com.cptnfizzbin.keycard.policy;
 public final class Wildcards {
     private Wildcards() {}
 
-    private static final String DEFAULT_WILDCARD = "_ANY_";
+    private static final WildcardToken.Named DEFAULT_WILDCARD = new WildcardToken.Named("_ANY_");
 
     /**
-     * meta.anyAction: absent -&gt; "_ANY_" default; explicit string -&gt; that
-     * string; explicit null -&gt; disabled (represented here as a Java
-     * {@code null} return - safe, since a real action name is always a
-     * non-null String, so callers guard with {@code anyToken != null}
-     * before comparing).
+     * meta.anyAction: absent (a {@code null} {@link PolicyDefinition.Meta#getAnyAction()})
+     * -&gt; the "_ANY_" default; otherwise whatever {@link WildcardToken}
+     * was declared ({@link WildcardToken.Disabled} or {@link WildcardToken.Named}).
      */
-    public static String effectiveAnyAction(PolicyDefinition.Meta meta) {
-        if (meta == null || !meta.isAnyActionDeclared()) return DEFAULT_WILDCARD;
+    public static WildcardToken effectiveAnyAction(PolicyDefinition.Meta meta) {
+        if (meta == null || meta.getAnyAction() == null) return DEFAULT_WILDCARD;
         return meta.getAnyAction();
     }
 
     /** meta.anySubject: symmetric with {@link #effectiveAnyAction} in every respect. */
-    public static String effectiveAnySubject(PolicyDefinition.Meta meta) {
-        if (meta == null || !meta.isAnySubjectDeclared()) return DEFAULT_WILDCARD;
+    public static WildcardToken effectiveAnySubject(PolicyDefinition.Meta meta) {
+        if (meta == null || meta.getAnySubject() == null) return DEFAULT_WILDCARD;
         return meta.getAnySubject();
     }
 
     /** True when `value` matches `ruleValue` exactly, or `ruleValue` is the (non-disabled) wildcard token. */
-    public static boolean matches(String value, String ruleValue, String anyToken) {
-        return value.equals(ruleValue) || (anyToken != null && ruleValue.equals(anyToken));
+    public static boolean matches(String value, String ruleValue, WildcardToken any) {
+        if (value.equals(ruleValue)) return true;
+        return any instanceof WildcardToken.Named named && ruleValue.equals(named.token());
     }
 }

@@ -17,7 +17,7 @@ point into `SPEC_V1-0-0.md`.
   `PolicyDefinition.rules` is currently `{ allow: [...], deny: [...] }`.
   It needs `rules` to become one ordered list of 4-tuples (or equivalent)
   carrying an allow/deny effect per entry, and a new `meta` field
-  (`anyAction`, `anySubject`, `actions`, `subjects`, `customOperators`,
+  (`anyAction`, `anySubject`, `actions`, `subjects`, `operators`,
   `application`). The JS `Rule` interface in that same file already has
   an `inverted: boolean` field per rule, and `PolicyBuilder.buildDef()`
   (`impl/js/src/builder/PolicyBuilder.ts`) already accumulates
@@ -67,7 +67,7 @@ behavior that's merely wrong:
 
 - **Malformed rule tuples **MUST** throw `PolicyLoadException`** (§2, EC-10).
 - **Catalog coverage **MUST** throw `PolicyLoadException`** when
-  `meta.actions`/`meta.subjects`/`meta.customOperators` is declared and
+  `meta.actions`/`meta.subjects`/`meta.operators` is declared and
   some rule references a name outside it (§2, EC-8, EC-13). No concept of
   these catalogs exists yet.
 - **`version` incompatibility **MUST** throw `PolicyVersionException`**
@@ -76,19 +76,26 @@ behavior that's merely wrong:
 - **A wildcard rule carrying a condition **MUST** throw** — see "No
   enforcement that a wildcard rule is unconditional" above.
 
-## `meta.customOperators` and custom-operator registration
+## `meta.operators` and custom-operator registration
 
-- **`meta.customOperators` doesn't exist yet, and neither does the
+- **`meta.operators` doesn't exist yet, and neither does the
   registered-vs-cataloged coverage check it implies** (§7.4.12, EC-13,
   EC-15). JS already has a runtime custom-checker registration point
   (`CustomConditionChecker`, `impl/js/src/conditions/Condition.ts`, passed
   to `Policy.from`), so this gap is purely additive — carry
-  `meta.customOperators` through `PolicyDefinition`, validate coverage at
-  construction (per the section above), then add the EC-15 check (when
-  evaluation hits a `$op` listed in `meta.customOperators` with no runtime
-  checker registered for it, log the required diagnostic). (`impl/java`'s
-  `Map<String, CustomConditionChecker>` mechanism, passed to `Policy.from`,
-  is a model for this - JS already has an equivalent shape to extend.)
+  `meta.operators` through `PolicyDefinition`, validate coverage at
+  construction (per the section above), then add the EC-15 check: for every
+  name `meta.operators` declares, an operator (built-in or custom) MUST
+  already be registered on the instance, checked once at construction time -
+  `Policy.from(...)` MUST throw a `PolicyLoadException` immediately if not,
+  rather than deferring to a runtime-only diagnostic. `impl/java`'s
+  `Collection<Operator>` mechanism (passed to both `PolicyBuilder` and
+  `Policy.from`) is a model for this - built-in and custom operators share
+  one registration entry point and one merged registry there, with a
+  construction-time `PolicyLoadException` if two operators (custom-vs-
+  built-in or custom-vs-custom) collide on the same `$name`; JS's own
+  `Operator[]`/`ConditionResolver` shape is already close to this and needs
+  the same registration-coverage and collision checks added.
 
 ## Condition operators
 

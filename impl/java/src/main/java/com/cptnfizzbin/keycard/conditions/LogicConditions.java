@@ -15,25 +15,25 @@ import java.util.List;
 public final class LogicConditions {
     private LogicConditions() {}
 
-    public static boolean or(ConditionResolver resolver, Object subject, List<?> conditions) {
+    public static boolean or(OperatorContext ctx, Object subject, List<?> conditions) {
         for (Object cond : conditions) {
-            if (resolver.evaluate(subject, cond)) {
+            if (ctx.resolveSubcondition(subject, cond)) {
                 return true;
             }
         }
         return false;
     }
 
-    public static boolean and(ConditionResolver resolver, Object subject, List<?> conditions) {
+    public static boolean and(OperatorContext ctx, Object subject, List<?> conditions) {
         for (Object cond : conditions) {
-            if (!resolver.evaluate(subject, cond)) {
+            if (!ctx.resolveSubcondition(subject, cond)) {
                 return false;
             }
         }
         return true;
     }
 
-    public static boolean not(ConditionResolver resolver, Object subject, Object condition) {
-        return !resolver.evaluate(subject, condition);
+    public static boolean not(OperatorContext ctx, Object subject, Object condition) {
+        return !ctx.resolveSubcondition(subject, condition);
     }
 }

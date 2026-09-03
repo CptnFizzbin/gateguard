@@ -9,7 +9,7 @@ import java.util.Set;
 /**
  * Recursively collects every non-built-in, {@code $}-prefixed operator
  * name used anywhere in a Conditions tree - used to enforce {@code
- * meta.customOperators} coverage at construction time (§3.2.3, EC-13).
+ * meta.operators} coverage at construction time (§3.2.3, EC-13).
  */
 final class CustomOperators {
     private CustomOperators() {}

@@ -5,7 +5,7 @@ description: "Complex nested conditions with logic operators"
 meta:
   # $startsWithUpper is a custom operator this test suite registers a
   # checker for - it isn't a built-in, per SPEC_V1-0-0.md §7.4.12.
-  customOperators: [$startsWithUpper]
+  operators: [$startsWithUpper]
 
 rules:
   - [allow, Read, Article]

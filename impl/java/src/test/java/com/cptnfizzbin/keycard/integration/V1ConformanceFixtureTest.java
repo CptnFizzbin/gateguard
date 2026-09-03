@@ -60,12 +60,14 @@ public class V1ConformanceFixtureTest {
         return params;
     }
 
+    private final String fixtureName;
     private final V1Fixtures.Suite suite;
     private final ComplianceFixtures.TestCase testCase;
 
     public V1ConformanceFixtureTest(
         String fixtureName, String suiteName, String caseName, V1Fixtures.Suite suite, ComplianceFixtures.TestCase testCase
     ) {
+        this.fixtureName = fixtureName;
         this.suite = suite;
         this.testCase = testCase;
     }
@@ -77,7 +79,7 @@ public class V1ConformanceFixtureTest {
             ComplianceFixtures.isIncluded(suite.version(), COMPLIANT_VERSION)
         );
 
-        Policy policy = Policy.from(suite.definition());
+        Policy policy = Policy.from(suite.definition(), V1Fixtures.operatorsFor(fixtureName));
 
         assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }

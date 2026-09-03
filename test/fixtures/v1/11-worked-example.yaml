@@ -2,16 +2,14 @@ version: "1.0.0"
 name: "Article Ownership Policy"
 description: >
   End-to-end mirror of the spec's own Appendix worked example
-  (SPEC_V1-0-0.md, "Appendix: worked example"). $hasRole is never
-  registered by this conformance suite, so it always evaluates false
-  (§7.4.12) - the admin-overrides-an-archive-deny case from the narrative
-  appendix, which depends on a host application registering $hasRole, isn't
-  reproducible here; the corresponding case below is a deny instead, for
-  that reason.
+  (SPEC_V1-0-0.md, "Appendix: worked example"), $hasRole included: this
+  conformance suite registers a real checker for it (subject.roles contains
+  the requested role), so the admin-overrides-an-archive-deny case from the
+  narrative appendix is reproduced here for real, not merely described.
 meta:
   actions: [Read, Create, Update, Delete]
   subjects: [Article]
-  customOperators: [$hasRole]
+  operators: [$hasRole]
 rules:
   - [allow, Read, _ANY_]
   - [allow, Create, Article]
@@ -51,12 +49,21 @@ cases:
 
   - name: >
       the owner cannot Delete their own archived article, because the deny
-      rule is declared after the ownership allow rule - and $hasRole, which
-      would otherwise let an admin override this, is unregistered here
+      rule is declared after the ownership allow rule and this subject has
+      no admin role to trigger the override below it
     action: Delete
     subject: Article
     subjectData: { owner_id: 1, status: archived }
     expected: deny
+
+  - name: >
+      an admin CAN delete someone else's archived article, because the last
+      rule ($hasRole: admin) is declared after - and so overrides - the
+      blanket archived-article deny rule above it (§6 last-rule-wins)
+    action: Delete
+    subject: Article
+    subjectData: { owner_id: 2, status: archived, roles: [admin] }
+    expected: allow
 
   - name: "a non-owner cannot Delete a published article either"
     action: Delete

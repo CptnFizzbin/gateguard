@@ -55,37 +55,34 @@ public final class PolicyDefinition {
 
     /**
      * SPEC_V1-0-0.md §3.2: the optional `meta` object, grouping six
-     * independent, all-optional fields. Constructed via {@link #builder()}
-     * since `anyAction`/`anySubject` are each tri-state (unset - the
-     * "_ANY_" default; an explicit string; or explicit `null`, disabling
-     * that wildcard position) and a plain nullable field can't distinguish
-     * "unset" from "explicitly null".
+     * independent, all-optional fields. Constructed via {@link #builder()}.
+     * `anyAction`/`anySubject` are each tri-state - unset (a {@code null}
+     * field here, meaning the "_ANY_" default applies), or a declared
+     * {@link WildcardToken} ({@link WildcardToken.Disabled} or {@link
+     * WildcardToken.Named}) - so a plain nullable {@code String} can't
+     * represent them; see {@link WildcardToken} for the type-state this
+     * replaces the previous boolean-pair workaround with.
      */
     @Getter
     @ToString
     @EqualsAndHashCode
     public static final class Meta {
-        private final boolean anyActionDeclared;
-        private final String anyAction;
-        private final boolean anySubjectDeclared;
-        private final String anySubject;
+        private final WildcardToken anyAction;
+        private final WildcardToken anySubject;
         private final List<String> actions;
         private final List<String> subjects;
-        private final List<String> customOperators;
+        private final List<String> operators;
         private final Object application;
 
         private Meta(
-            boolean anyActionDeclared, String anyAction,
-            boolean anySubjectDeclared, String anySubject,
-            List<String> actions, List<String> subjects, List<String> customOperators, Object application
+            WildcardToken anyAction, WildcardToken anySubject,
+            List<String> actions, List<String> subjects, List<String> operators, Object application
         ) {
-            this.anyActionDeclared = anyActionDeclared;
             this.anyAction = anyAction;
-            this.anySubjectDeclared = anySubjectDeclared;
             this.anySubject = anySubject;
             this.actions = actions != null ? List.copyOf(actions) : null;
             this.subjects = subjects != null ? List.copyOf(subjects) : null;
-            this.customOperators = customOperators != null ? List.copyOf(customOperators) : null;
+            this.operators = operators != null ? List.copyOf(operators) : null;
             this.application = application;
         }
 
@@ -94,26 +91,28 @@ public final class PolicyDefinition {
         }
 
         public static final class Builder {
-            private boolean anyActionDeclared = false;
-            private String anyAction;
-            private boolean anySubjectDeclared = false;
-            private String anySubject;
+            private WildcardToken anyAction;
+            private WildcardToken anySubject;
             private List<String> actions;
             private List<String> subjects;
-            private List<String> customOperators;
+            private List<String> operators;
             private Object application;
 
-            /** §3.2.1: declares the action wildcard token explicitly - pass {@code null} to disable it entirely. */
-            public Builder anyAction(String value) {
-                this.anyActionDeclared = true;
-                this.anyAction = value;
+            /**
+             * §3.2.1: declares the action wildcard token explicitly.
+             * `value` is dispatched per {@link WildcardToken#of}: a
+             * {@link String} names the token; {@code null}/{@code false}
+             * disables the wildcard entirely; anything else throws
+             * {@code PolicyLoadException} immediately.
+             */
+            public Builder anyAction(Object value) {
+                this.anyAction = WildcardToken.of(value);
                 return this;
             }
 
-            /** §3.2.1: declares the subject wildcard token explicitly - pass {@code null} to disable it entirely. */
-            public Builder anySubject(String value) {
-                this.anySubjectDeclared = true;
-                this.anySubject = value;
+            /** §3.2.1: declares the subject wildcard token explicitly - symmetric with {@link #anyAction}. */
+            public Builder anySubject(Object value) {
+                this.anySubject = WildcardToken.of(value);
                 return this;
             }
 
@@ -127,8 +126,8 @@ public final class PolicyDefinition {
                 return this;
             }
 
-            public Builder customOperators(List<String> value) {
-                this.customOperators = value;
+            public Builder operators(List<String> value) {
+                this.operators = value;
                 return this;
             }
 
@@ -138,10 +137,7 @@ public final class PolicyDefinition {
             }
 
             public Meta build() {
-                return new Meta(
-                    anyActionDeclared, anyAction, anySubjectDeclared, anySubject,
-                    actions, subjects, customOperators, application
-                );
+                return new Meta(anyAction, anySubject, actions, subjects, operators, application);
             }
         }
     }

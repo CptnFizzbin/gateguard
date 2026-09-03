@@ -59,7 +59,7 @@ public class PolicyFixtureCaseTest {
 
     @Test
     public void resolvesExpectedResult() {
-        Policy policy = Policy.from(policyDef, PolicyFixtures.checkersFor(policyName));
+        Policy policy = Policy.from(policyDef, PolicyFixtures.operatorsFor(policyName));
 
         assertEquals(testCase.name(), testCase.expected(), ComplianceFixtures.resolve(policy, testCase));
     }
