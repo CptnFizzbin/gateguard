@@ -482,9 +482,22 @@ These are two different things and **MUST** be distinguished:
   with no `status` key is `false`; `{ status: { $ne: "archived" } }` against
   that same subject is `true`. Every other operator keeps the blanket
   `false` (`$gt`, `$in`, `$has`, `$substr`, and so on aren't defined as an
-  exact negation of anything, so they aren't exempted). Either way this is
-  absence, not a type issue — it **MUST NOT** trigger the §7.1 console
-  diagnostic.
+  exact negation of anything, so they aren't exempted). This exception is
+  narrow: it applies when `$ne` is itself the (sole) nested condition being
+  evaluated against the missing field, per §7.4.2 — it does **NOT** propagate
+  a "the field is missing" signal down into an arbitrary condition tree for
+  every operator to interpret on its own (that would leak the §7.1
+  diagnostic into `$gt`/`$in`/`$has`/`$substr` being handed a non-number/
+  non-array `undefined`, which §7.1's missing-field carve-out explicitly
+  forbids). A `$ne` that is one key among several in a multi-key condition
+  object (§7.5) still benefits from this exception for its own key, but the
+  object as a whole is still ANDed with its sibling keys as normal — a
+  sibling field key nested one level deeper than the missing field (e.g.
+  `{ author: { $ne: null, name: "Alice" } }` against a subject with no
+  `author` at all) still hits the general missing-field-is-`false` rule for
+  that sibling, since there's no object there to narrow `name` out of.
+  Either way this is absence, not a type issue — it **MUST NOT** trigger the
+  §7.1 console diagnostic.
 - **Explicit `null`** — the subject has the key, and its value is `null`. This
   is a real value and is compared like any other: `{ field: null }`
   (bare-value shorthand, §7.2) matches only when `subject.field` is
