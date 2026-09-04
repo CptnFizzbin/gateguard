@@ -3,7 +3,10 @@ import {Operator} from "./operators/operator";
 import {DefaultOperators} from "./operators/defaultOperators";
 import {hasField} from "./operators/field/fieldAccess";
 import {JsonValue} from "../lib/json";
-import {getLogger} from "../lib/logger";
+import {PolicyLoadException} from "../errors";
+
+/** Every operator name {@link ConditionResolver} understands out of the box - the single source of truth for "is this name built-in". */
+export const BUILTIN_OPERATOR_NAMES: ReadonlySet<string> = new Set(DefaultOperators.map((op) => op.name));
 
 /**
  * Implements SPEC_V1-0-0.md §7: the condition language and its
@@ -16,10 +19,42 @@ import {getLogger} from "../lib/logger";
 export class ConditionResolver {
   private operatorRegistry = new Map<string, Operator>
 
+  /**
+   * @param operators custom operators to register alongside the built-ins
+   *   (§7.4.12) - built-in and custom operators share this one array-based
+   *   entry point. Constructing this with a name collision (a custom
+   *   operator sharing a `$name` with a built-in, or with another operator
+   *   in `operators`) MUST throw a {@link PolicyLoadException} immediately
+   *   - never a silent overwrite (SPEC_V1-0-0.md §3.2.3, EC-16).
+   */
   constructor(operators: Operator[] = []) {
-    const allOperators = [...DefaultOperators, ...operators]
-    for (const operator of allOperators) {
+    for (const operator of DefaultOperators) {
       this.operatorRegistry.set(operator.name, operator)
+    }
+    for (const operator of operators) {
+      if (this.operatorRegistry.has(operator.name)) {
+        throw new PolicyLoadException(
+          `Duplicate operator "${operator.name}": an operator with this name is already registered (built-in or custom) - operator names MUST be unique (SPEC_V1-0-0.md §3.2.3, EC-16).`
+        );
+      }
+      this.operatorRegistry.set(operator.name, operator)
+    }
+  }
+
+  /**
+   * §3.2.3, EC-15 (promoted): throws if any name in `names` isn't
+   * registered on this resolver - built-in or custom. Used by `Policy` to
+   * enforce `meta.operators` registration coverage in full at construction
+   * time, regardless of whether any rule actually reaches a given operator
+   * during evaluation.
+   */
+  assertAllRegistered(names: Iterable<string>): void {
+    for (const name of names) {
+      if (!this.operatorRegistry.has(name)) {
+        throw new PolicyLoadException(
+          `meta.operators declares "${name}" but no operator with that name is registered (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15).`
+        );
+      }
     }
   }
 
@@ -60,14 +95,14 @@ export class ConditionResolver {
 
     const operator = this.operatorRegistry.get(key)
     if (!operator) {
-      // §7.4.12: an operator with no checker registered (built-in or
+      // §7.4.12, EC-13: an operator with no checker registered (built-in or
       // custom) MUST evaluate to false - never a no-op true, and never
-      // treated as a field name. Not itself a required §7.1 diagnostic
-      // (an unrecognized name is a different mistake than a recognized
-      // operator given the wrong operand type - EC-13), but logging
-      // regardless makes a typo easier to notice, and covers the
-      // declared-but-unregistered case (EC-15) where it IS required.
-      getLogger().warn(`Operator '${key}' is not registered`);
+      // treated as a field name, and never itself a required §7.1
+      // diagnostic (an unrecognized name is ordinary unmatched vocabulary,
+      // not a type issue). A cataloged-but-unregistered name (EC-15) can no
+      // longer even reach this branch: `Policy` now enforces meta.operators
+      // registration in full at construction time, so any name still
+      // unregistered here was never cataloged.
       return false;
     }
 

@@ -2,11 +2,11 @@ import * as semver from "semver";
 import {Action} from "../action";
 import {Subject} from "../subject";
 import {Condition, ConditionResolver} from "../conditions";
+import {BUILTIN_OPERATOR_NAMES} from "../conditions/ConditionResolver";
 import {PolicyError, PolicyLoadException, PolicyVersionException} from "../errors";
 import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
 import {DISABLED, effectiveAnyAction, effectiveAnySubject} from "./wildcards";
 import {Operator} from "../conditions/operators/operator";
-import {DefaultOperators} from "../conditions/operators/defaultOperators";
 import {GATEGUARD_POLICY_VERSION} from "../version";
 
 /** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. Single-sourced from {@link GATEGUARD_POLICY_VERSION}, alongside `PolicyBuilder`'s `BUILDER_VERSION`, so the two can never drift apart. */
@@ -15,9 +15,6 @@ const SUPPORTED_MAJOR = semver.major(SUPPORTED_VERSION);
 const SUPPORTED_MINOR = semver.minor(SUPPORTED_VERSION);
 /** Same MAJOR as SUPPORTED_VERSION, MINOR no higher - PATCH is irrelevant either way (§2). */
 const COMPATIBLE_RANGE = `>=${SUPPORTED_MAJOR}.0.0 <${SUPPORTED_MAJOR}.${SUPPORTED_MINOR + 1}.0`;
-
-/** Every operator {@link ConditionResolver} understands natively, by name - anything else is a custom operator. */
-const BUILTIN_OPERATOR_NAMES = new Set<string>(DefaultOperators.map((op) => op.name));
 
 /**
  * Recursively collects every non-built-in, `$`-prefixed operator name used
@@ -56,10 +53,11 @@ export class Policy<
     operators: Operator[] = []
   ) {
     Policy.validateVersion(definition.version);
-    Policy.validateRules(definition);
 
     this.definition = definition;
     this.resolver = new ConditionResolver(operators);
+    Policy.validateOperatorsRegistered(definition, this.resolver);
+    Policy.validateRules(definition);
   }
 
   /**
@@ -99,6 +97,21 @@ export class Policy<
         `Unsupported policy version "${version}": this implementation supports ${SUPPORTED_MAJOR}.0.0 through ${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}.x (SPEC_V1-0-0.md §2).`
       );
     }
+  }
+
+  /**
+   * §3.2.3, EC-15 (promoted): when `meta.operators` is declared, every
+   * name it lists MUST already be registered on this Policy - built-in or
+   * custom - checked once here at construction time, regardless of
+   * whether any rule actually reaches that operator during evaluation.
+   * This replaces the previous behavior of deferring an unregistered-but-
+   * cataloged name to a runtime-only diagnostic.
+   */
+  private static validateOperatorsRegistered(definition: PolicyDefinition, resolver: ConditionResolver): void {
+    const declared = definition.meta?.operators;
+    if (!declared) return;
+
+    resolver.assertAllRegistered(declared);
   }
 
   private static validateRules(definition: PolicyDefinition): void {

@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import { Policy } from "./Policy";
 import { createAction } from "../action";
 import { createSubject } from "../subject";
+import { createOperator } from "../conditions";
 import { PolicyLoadException, PolicyVersionException } from "../errors";
 
 const Delete = createAction("Delete");
@@ -111,5 +112,56 @@ describe("Policy: construction-time validation", () => {
         rules: [["allow", "Read", "Article", { $isAdmin: true }]],
       })
     ).toThrow(PolicyLoadException);
+  });
+
+  // --- operator registry collisions (SPEC_V1-0-0.md §3.2.3, EC-16) ---
+
+  test("throws PolicyLoadException when a custom operator collides with a builtin", () => {
+    expect(() =>
+      Policy.from(
+        { version: "1.0.0", rules: [] },
+        [createOperator("$eq", () => true)]
+      )
+    ).toThrow(PolicyLoadException);
+  });
+
+  test("throws PolicyLoadException when two custom operators collide with each other", () => {
+    expect(() =>
+      Policy.from(
+        { version: "1.0.0", rules: [] },
+        [createOperator("$hasRole", () => true), createOperator("$hasRole", () => false)]
+      )
+    ).toThrow(PolicyLoadException);
+  });
+
+  // --- meta.operators promotes "cataloged but never registered" to a construction-time throw (EC-15) ---
+
+  test("throws PolicyLoadException when meta.operators declares a name nothing is registered for", () => {
+    // Unlike EC-13 above, this throws even though no rule references
+    // $hasRole at all - meta.operators' registration requirement is
+    // checked in full at construction time, not merely for names rules
+    // actually use.
+    expect(() =>
+      Policy.from({
+        version: "1.0.0",
+        meta: { operators: ["$hasRole"] },
+        rules: [],
+      })
+    ).toThrow(PolicyLoadException);
+  });
+
+  test("meta.operators is satisfied by a builtin name", () => {
+    expect(() =>
+      Policy.from({ version: "1.0.0", meta: { operators: ["$eq"] }, rules: [] })
+    ).not.toThrow();
+  });
+
+  test("meta.operators is satisfied by a registered custom operator", () => {
+    expect(() =>
+      Policy.from(
+        { version: "1.0.0", meta: { operators: ["$hasRole"] }, rules: [] },
+        [createOperator("$hasRole", () => true)]
+      )
+    ).not.toThrow();
   });
 });

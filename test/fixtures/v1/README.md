@@ -2,24 +2,16 @@
 
 The YAML files in this directory are a conformance test suite for
 [`SPEC_V1-0-0.md`](../../../SPEC_V1-0-0.md) — the authoritative v1 policy
-spec — as opposed to `test/fixtures/policies/`, whose fixtures predate that
-spec and still use the old `allow:`/`deny:` document shape (see
-`KNOWN_ISSUES.md`).
+spec. `test/fixtures/policies/` is a separate, format-agnostic fixture set
+(shared between `impl/java` and `impl/js`'s own unit-style suites) that
+also uses this same v1 `rules`/`meta` shape.
 
 Every implementation **MUST** read these fixtures as part of its test suite
 (`impl/js/tests/integration/v1ConformanceFixtures.test.ts` and
-`impl/java/.../integration/V1ConformanceFixtureTest.java` do so today). As of
-this writing, neither implementation has been migrated to the v1 `rules`/
-`meta` schema yet (see `KNOWN_ISSUES.md`), so these fixtures are read through
-a best-effort adapter that reshapes a v1 `PolicyDefinition` into whatever the
-current, pre-v1 `Policy`/`PolicyDefinition` classes expect. Cases that depend
-on v1-only behavior the current implementations don't have yet (last-rule-
-wins ordering, the `_ANY_` wildcard token, `meta` catalogs, `$substr`,
-`$field`, console diagnostics, ...) are **expected to fail** until the
-implementations catch up — that's the point of adding this suite ahead of
-the implementation work, not a bug in the fixtures. Once an implementation
-adopts the v1 schema natively, its adapter should be simplified to pass the
-parsed definition straight through instead of reshaping it.
+`impl/java/.../integration/V1ConformanceFixtureTest.java` do so today). Both
+`impl/java` and `impl/js` now implement the v1 schema natively, so each
+parsed suite's `rules`/`meta` are handed straight to a real
+`Policy`/`PolicyDefinition` - no adapter needed.
 
 Discovery, subject-argument construction, and per-`version` filtering are
 factored into small, reusable utility modules shared by every compliance
