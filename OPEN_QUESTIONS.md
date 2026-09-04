@@ -26,3 +26,30 @@ conformance-tested) semantics in §7.3, not just a clarification.
 Needs a decision: keep current behavior, or amend §7.3/§7.4.2 to special-case
 `$ne` (and decide whether that special-casing should extend to other
 operators too).
+
+## 2. Should `meta.operators` catalog-completeness enforcement be a MUST or a SHOULD-with-opt-out?
+
+Current spec (§3.2.3, EC-13) makes this unconditional: when `meta.operators`
+is declared, `Policy.from(...)` **MUST** throw a `PolicyLoadException` at
+construction if any rule's condition uses a custom `$op` not listed in the
+catalog — the same enforcement tier as `meta.actions`/`meta.subjects`
+(EC-8). There's no opt-out; this is different from `$op`s referenced when
+`meta.operators` isn't declared at all (or doesn't mention that name),
+which is a separate, already-settled case (§7.4.12: evaluates to `false`
+at runtime, no construction-time check applies since there's no catalog to
+violate).
+
+Raised expectation: this eager catalog-completeness walk should be a
+**SHOULD**, not a MUST, with room for an implementation (or a developer,
+explicitly) to skip it — e.g. when a policy has enough complex/nested
+conditions that eagerly walking all of them at construction is costly, or
+when a developer deliberately opts out for other reasons. This would
+mirror the pattern §2 already uses for MINOR-version checking:
+*"Implementations MAY provide an option to disable MINOR version
+verification... but this MUST be an explicit opt-in; the default behavior
+is the MINOR check above."* — i.e. the default stays strict, but a named,
+explicit opt-out exists.
+
+Needs a decision: keep the current unconditional MUST (uniform validation,
+no escape hatch), or amend §3.2.3/EC-13 to add an explicit, default-on
+opt-out mechanism the same shape as §2's MINOR-version-check opt-out.
