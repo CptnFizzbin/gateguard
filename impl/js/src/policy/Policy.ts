@@ -1,22 +1,63 @@
-import { Action } from "../action";
-import { Subject, SubjectDef, SubjectRef } from "../subject";
-import { Condition, ConditionResolver, CustomConditionChecker } from "../conditions";
-import { PolicyError } from "../errors";
-import type { PolicyDefinition } from "../policy/PolicyDefinition";
+import * as semver from "semver";
+import {Action} from "../action";
+import {Subject} from "../subject";
+import {Condition, ConditionResolver} from "../conditions";
+import {BUILTIN_OPERATOR_NAMES} from "../conditions/ConditionResolver";
+import {PolicyError, PolicyLoadException, PolicyVersionException} from "../errors";
+import type {PolicyDefinition, RuleTuple} from "./PolicyDefinition";
+import {DISABLED, effectiveAnyAction, effectiveAnySubject} from "./wildcards";
+import {Operator} from "../conditions/operators/operator";
+import {KEYCARD_POLICY_VERSION} from "../version";
+
+/** The highest version this implementation supports natively - SPEC_V1-0-0.md §2. PATCH never affects compatibility. Single-sourced from {@link KEYCARD_POLICY_VERSION}, alongside `PolicyBuilder`'s `BUILDER_VERSION`, so the two can never drift apart. */
+const SUPPORTED_VERSION = KEYCARD_POLICY_VERSION;
+const SUPPORTED_MAJOR = semver.major(SUPPORTED_VERSION);
+const SUPPORTED_MINOR = semver.minor(SUPPORTED_VERSION);
+/** Same MAJOR as SUPPORTED_VERSION, MINOR no higher - PATCH is irrelevant either way (§2). */
+const COMPATIBLE_RANGE = `>=${SUPPORTED_MAJOR}.0.0 <${SUPPORTED_MAJOR}.${SUPPORTED_MINOR + 1}.0`;
+
+/**
+ * Recursively collects every non-built-in, `$`-prefixed operator name used
+ * anywhere in a Conditions tree - used to enforce `meta.operators`
+ * coverage at construction time (§3.2.3, EC-13).
+ */
+function collectCustomOperators(condition: Condition | undefined, out: Set<string>): void {
+  if (condition === undefined || condition === null || typeof condition !== "object") return;
+
+  for (const [key, value] of Object.entries(condition as Record<string, any>)) {
+    if (key.startsWith("$")) {
+      if (key === "$or" || key === "$and") {
+        if (Array.isArray(value)) value.forEach((c: Condition) => collectCustomOperators(c, out));
+      } else if (key === "$not") {
+        collectCustomOperators(value, out);
+      } else if (key === "$field" && Array.isArray(value) && value.length === 2) {
+        collectCustomOperators(value[1], out);
+      } else if (!BUILTIN_OPERATOR_NAMES.has(key)) {
+        out.add(key);
+      }
+    } else {
+      collectCustomOperators(value, out);
+    }
+  }
+}
 
 export class Policy<
   TActions extends Action = Action,
   TSubjects extends Subject = Subject
 > {
-  private definition: PolicyDefinition<TActions, TSubjects>;
-  private resolver: ConditionResolver;
+  private readonly definition: PolicyDefinition;
+  private readonly resolver: ConditionResolver;
 
   constructor(
-    definition: PolicyDefinition<TActions, TSubjects>,
-    customConditions?: CustomConditionChecker
+    definition: PolicyDefinition,
+    operators: Operator[] = []
   ) {
+    Policy.validateVersion(definition.version);
+
     this.definition = definition;
-    this.resolver = new ConditionResolver(customConditions);
+    this.resolver = new ConditionResolver(operators);
+    Policy.validateOperatorsRegistered(definition, this.resolver);
+    Policy.validateRules(definition);
   }
 
   /**
@@ -28,119 +69,187 @@ export class Policy<
   static from<
     TActions extends Action = Action,
     TSubjects extends Subject = Subject
-  >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
-    return new Policy(definition, customConditions);
+  >(
+    definition: PolicyDefinition,
+    operators: Operator[] = []
+  ): Policy<TActions, TSubjects> {
+    return new Policy(definition, operators);
   }
 
-  /** Alias of `from`. */
+  /** Alias of {@link from}. */
   static fromDto<
     TActions extends Action = Action,
     TSubjects extends Subject = Subject
-  >(definition: PolicyDefinition<TActions, TSubjects>, customConditions?: CustomConditionChecker): Policy<TActions, TSubjects> {
-    return Policy.from(definition, customConditions);
+  >(
+    definition: PolicyDefinition,
+    operators: Operator[] = []
+  ): Policy<TActions, TSubjects> {
+    return Policy.from(definition, operators);
   }
 
-  def(): PolicyDefinition<TActions, TSubjects> {
-    return this.toDefinition();
-  }
-
-  /** Returns the PolicyDefinition backing this policy. */
-  toDefinition(): PolicyDefinition<TActions, TSubjects> {
-    return this.definition;
-  }
-
-  /** Alias of `toDefinition`. */
-  toDto(): PolicyDefinition<TActions, TSubjects> {
-    return this.toDefinition();
-  }
-
-  can(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    return this.checkPermission(action, subject);
-  }
-
-  cannot(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): boolean {
-    return !this.can(action, subject);
-  }
-
-  require(action: TActions, subject: TSubjects | SubjectDef | SubjectRef | string): void {
-    if (!this.can(action, subject)) {
-      throw new PolicyError(
-        `Access denied: cannot ${action} on ${typeof subject === "string" ? subject : JSON.stringify(subject)}`
+  private static validateVersion(version: string): void {
+    // §2.1: PATCH (and MINOR) may be omitted - "1"/"1.0" are valid
+    // shorthand for "1.0.0" - so coerce before comparing rather than
+    // requiring a strict three-component string.
+    const coerced = semver.coerce(version);
+    if (!coerced || !semver.satisfies(coerced, COMPATIBLE_RANGE)) {
+      throw new PolicyVersionException(
+        `Unsupported policy version "${version}": this implementation supports ${SUPPORTED_MAJOR}.0.0 through ${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}.x (SPEC_V1-0-0.md §2).`
       );
     }
   }
 
-  append(definition: PolicyDefinition<TActions, TSubjects>): Policy<TActions, TSubjects> {
-    const merged: PolicyDefinition<TActions, TSubjects> = {
-      version: this.definition.version,
-      rules: {
-        allow: [...this.definition.rules.allow, ...definition.rules.allow],
-        deny: [...this.definition.rules.deny, ...definition.rules.deny],
-      },
-    };
-    return new Policy(merged, this.resolver["customCheckers"]);
+  /**
+   * §3.2.3, EC-15 (promoted): when `meta.operators` is declared, every
+   * name it lists MUST already be registered on this Policy - built-in or
+   * custom - checked once here at construction time, regardless of
+   * whether any rule actually reaches that operator during evaluation.
+   * This replaces the previous behavior of deferring an unregistered-but-
+   * cataloged name to a runtime-only diagnostic.
+   */
+  private static validateOperatorsRegistered(definition: PolicyDefinition, resolver: ConditionResolver): void {
+    const declared = definition.meta?.operators;
+    if (!declared) return;
+
+    resolver.assertAllRegistered(declared);
   }
 
-  /** True iff a rule allows this action/subject, and no rule denies it. */
-  private checkPermission(
-    action: TActions,
-    subject: TSubjects | SubjectDef | SubjectRef | string
-  ): boolean {
-    return (
-      this.matchesAnyRule(this.definition.rules.allow, action, subject) &&
-      !this.matchesAnyRule(this.definition.rules.deny, action, subject)
-    );
-  }
+  private static validateRules(definition: PolicyDefinition): void {
+    const meta = definition.meta;
+    const anyAction = effectiveAnyAction(meta);
+    const anySubject = effectiveAnySubject(meta);
 
-  private matchesAnyRule(
-    rules: Array<[TActions | string, TSubjects | SubjectDef | string, Condition?]>,
-    action: TActions,
-    subject: TSubjects | SubjectDef | SubjectRef | string
-  ): boolean {
-    const subjectName = this.getSubjectName(subject);
+    const actionsCatalog = meta?.actions ? new Set(meta.actions) : undefined;
+    const subjectsCatalog = meta?.subjects ? new Set(meta.subjects) : undefined;
+    const operatorsCatalog = meta?.operators ? new Set(meta.operators) : undefined;
 
-    for (const [ruleAction, ruleSubject, ruleCondition] of rules) {
-      if (this.matchesAction(action, ruleAction) && this.matchesSubject(subjectName, ruleSubject)) {
-        if (!ruleCondition || this.resolver.evaluate(this.getSubjectValue(subject), ruleCondition)) {
-          return true;
+    for (const rule of definition.rules as RuleTuple[]) {
+      if (!Array.isArray(rule) || rule.length < 3) {
+        throw new PolicyLoadException(
+          `Malformed rule tuple (fewer than 3 elements): ${JSON.stringify(rule)} (SPEC_V1-0-0.md §3.3, EC-10).`
+        );
+      }
+
+      const [effect, action, subjectName, conditions] = rule;
+
+      if (effect !== "allow" && effect !== "deny") {
+        throw new PolicyLoadException(
+          `Malformed rule tuple: effect must be "allow" or "deny", got ${JSON.stringify(effect)} (SPEC_V1-0-0.md §3.3, EC-10).`
+        );
+      }
+      if (typeof action !== "string") {
+        throw new PolicyLoadException(
+          `Malformed rule tuple: action must be a string, got ${JSON.stringify(action)} (SPEC_V1-0-0.md §3.3, EC-10).`
+        );
+      }
+      if (typeof subjectName !== "string") {
+        throw new PolicyLoadException(
+          `Malformed rule tuple: subject must be a string, got ${JSON.stringify(subjectName)} (SPEC_V1-0-0.md §3.3, EC-10).`
+        );
+      }
+
+      const isWildcardAction = anyAction !== DISABLED && action === anyAction;
+      const isWildcardSubject = anySubject !== DISABLED && subjectName === anySubject;
+
+      if (isWildcardAction && isWildcardSubject && conditions) {
+        throw new PolicyLoadException(
+          `Rule [${effect}, ${action}, ${subjectName}] is wildcarded on both the action and the subject but carries a Conditions element - this MUST be unconditional (SPEC_V1-0-0.md §6 property 5, EC-6).`
+        );
+      }
+
+      if (actionsCatalog && !isWildcardAction && !actionsCatalog.has(action)) {
+        throw new PolicyLoadException(
+          `Rule action "${action}" is not covered by meta.actions (SPEC_V1-0-0.md §3.2.2, EC-8).`
+        );
+      }
+      if (subjectsCatalog && !isWildcardSubject && !subjectsCatalog.has(subjectName)) {
+        throw new PolicyLoadException(
+          `Rule subject "${subjectName}" is not covered by meta.subjects (SPEC_V1-0-0.md §3.2.2, EC-8).`
+        );
+      }
+
+      if (operatorsCatalog && conditions) {
+        const used = new Set<string>();
+        collectCustomOperators(conditions, used);
+        for (const op of used) {
+          if (!operatorsCatalog.has(op)) {
+            throw new PolicyLoadException(
+              `Rule uses custom operator "${op}" not covered by meta.operators (SPEC_V1-0-0.md §3.2.3, EC-13).`
+            );
+          }
         }
       }
     }
-
-    return false;
   }
 
-  private getSubjectName(subject: TSubjects | SubjectDef | SubjectRef | string): string {
-    if (typeof subject === "string") {
-      return subject;
-    }
-    return subject.__name;
+  /** Returns the PolicyDefinition backing this policy. */
+  toDefinition(): PolicyDefinition {
+    return this.definition;
   }
 
-  private getSubjectValue(subject: TSubjects | SubjectDef | SubjectRef | string): any {
-    if (typeof subject === "string") {
-      return subject;
-    }
-    if ("value" in subject && subject.value !== undefined) {
-      return subject.value;
-    }
-    return subject;
+  /** Alias of {@link toDefinition}. */
+  toDto(): PolicyDefinition {
+    return this.toDefinition();
   }
 
-  private matchesAction(action: TActions, ruleAction: TActions | string): boolean {
-    return action === ruleAction || ruleAction === "*";
+  /** Alias of {@link toDefinition}. */
+  def(): PolicyDefinition {
+    return this.toDefinition();
   }
 
-  private matchesSubject(
-    subjectName: string,
-    ruleSubject: TSubjects | SubjectDef | string
-  ): boolean {
-    if (typeof ruleSubject === "string") {
-      return subjectName === ruleSubject || ruleSubject === "*";
+  can(action: TActions, subject: TSubjects): boolean {
+    return this.checkPermission(action, subject);
+  }
+
+  cannot(action: TActions, subject: TSubjects): boolean {
+    return !this.can(action, subject);
+  }
+
+  require(action: TActions, subject: TSubjects): void {
+    if (!this.can(action, subject)) {
+      throw new PolicyError(`Access denied: cannot ${action.name} on ${subject.name}`);
     }
-    if ("__name" in ruleSubject) {
-      return subjectName === ruleSubject.__name;
+  }
+
+  /**
+   * SPEC_V1-0-0.md §6: reverse scan over `rules`, returning the effect of
+   * the first (i.e. most-recently-declared) rule whose action, subject,
+   * and (if present) conditions all match. There is no independent
+   * "allow AND NOT deny" veto and no combination of multiple matching
+   * rules: exactly one rule decides the outcome, or none does and the
+   * result is default deny.
+   */
+  private checkPermission(action: TActions, subject: TSubjects): boolean {
+    const meta = this.definition.meta;
+    const anyAction = effectiveAnyAction(meta);
+    const anySubject = effectiveAnySubject(meta);
+    const rules = this.definition.rules;
+
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const [effect, ruleAction, ruleSubject, ruleConditions] = rules[i];
+
+      if (!this.matchesAction(action, ruleAction, anyAction)) continue;
+      if (!this.matchesSubject(subject, ruleSubject, anySubject)) continue;
+
+      if (ruleConditions) {
+        // A conditional rule can never be satisfied by a bare-type/no-instance
+        // check - there's no instance data for the condition to inspect (EC-7).
+        if (subject.instance === undefined) continue;
+        if (!this.resolver.evaluate(subject.instance, ruleConditions)) continue;
+        return effect === "allow";
+      }
+
+      return effect === "allow";
     }
-    return false;
+
+    return false; // EC-1, EC-2: default deny.
+  }
+
+  private matchesAction(action: TActions, ruleAction: string, anyAction: string | typeof DISABLED): boolean {
+    return action.name === ruleAction || (anyAction !== DISABLED && ruleAction === anyAction);
+  }
+
+  private matchesSubject(subject: TSubjects, ruleSubject: string, anySubject: string | typeof DISABLED): boolean {
+    return subject.name === ruleSubject || (anySubject !== DISABLED && ruleSubject === anySubject);
   }
 }

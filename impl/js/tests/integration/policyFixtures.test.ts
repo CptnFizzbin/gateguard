@@ -2,8 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
-import { Policy, PolicyDefinition } from "../../src";
-import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
+import { createOperator, Operator, Policy, PolicyDefinition } from "../../src";
+import { listYamlFiles, actionArgFor, subjectArgFor } from "./complianceFixtures";
 
 /**
  * Metaprogrammed integration suite: every `*.yaml` fixture under
@@ -20,6 +20,18 @@ import { listYamlFiles, subjectArgFor } from "./complianceFixtures";
  */
 
 const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/policies");
+
+/**
+ * Some fixture policies exercise a custom condition operator, which - per
+ * SPEC_V1-0-0.md §7.4.12 - only the host application (here, this test
+ * suite) can implement; declaring it in meta.operators documents it but
+ * doesn't wire up behavior. Keyed by fixture file name.
+ */
+const CUSTOM_CHECKERS: Record<string, Operator[]> = {
+  "policy-05-advanced.yaml": [
+    createOperator("$startsWithUpper", (subject) => typeof subject === "string" && /^[A-Z]/.test(subject)),
+  ],
+};
 
 interface TestCase {
   name: string;
@@ -46,25 +58,9 @@ function discoverFixtures(): FixtureFile[] {
   });
 }
 
-/** Parses a policy.yaml fixture's on-disk shape into a PolicyDefinition. */
+/** Parses a policy.yaml fixture's on-disk shape (the v1 rules/meta schema, per SPEC_V1-0-0.md §3) into a PolicyDefinition. */
 function loadPolicyDef(rawYaml: string): PolicyDefinition {
-  const parsed = YAML.parse(rawYaml) as {
-    version: number;
-    name?: string;
-    description?: string;
-    allow?: PolicyDefinition["rules"]["allow"];
-    deny?: PolicyDefinition["rules"]["deny"];
-  };
-
-  return {
-    version: parsed.version,
-    name: parsed.name,
-    description: parsed.description,
-    rules: {
-      allow: parsed.allow ?? [],
-      deny: parsed.deny ?? [],
-    },
-  };
+  return YAML.parse(rawYaml) as PolicyDefinition;
 }
 
 const fixtures = discoverFixtures();
@@ -75,20 +71,20 @@ test("discovers at least one policy fixture", () => {
   expect(fixtures.length).toBeGreaterThan(0);
 });
 
-describe.each(fixtures)("policy fixture: $policyName", ({ policyPath, testPath }) => {
+describe.each(fixtures)("policy fixture: $policyName", ({ policyName, policyPath, testPath }) => {
   const rawYaml = fs.readFileSync(policyPath, "utf-8");
+  const customConditions = CUSTOM_CHECKERS[policyName];
 
   test("successfully reads the policy.yaml file", () => {
     const policyDef = loadPolicyDef(rawYaml);
 
-    expect(typeof policyDef.version).toBe("number");
-    expect(Array.isArray(policyDef.rules.allow)).toBe(true);
-    expect(Array.isArray(policyDef.rules.deny)).toBe(true);
+    expect(typeof policyDef.version).toBe("string");
+    expect(Array.isArray(policyDef.rules)).toBe(true);
   });
 
   test("Policy.from(definition).toDefinition() deeply equals the parsed definition", () => {
     const policyDef = loadPolicyDef(rawYaml);
-    const policy = Policy.from(policyDef);
+    const policy = Policy.from(policyDef, customConditions);
 
     expect(policy.toDefinition()).toEqual(policyDef);
   });
@@ -96,7 +92,7 @@ describe.each(fixtures)("policy fixture: $policyName", ({ policyPath, testPath }
   test("fromDto/toDto aliases behave identically to from/toDefinition", () => {
     const policyDef = loadPolicyDef(rawYaml);
 
-    expect(Policy.fromDto(policyDef).toDto()).toEqual(policyDef);
+    expect(Policy.fromDto(policyDef, customConditions).toDto()).toEqual(policyDef);
   });
 
   if (!fs.existsSync(testPath)) {
@@ -105,9 +101,9 @@ describe.each(fixtures)("policy fixture: $policyName", ({ policyPath, testPath }
   }
 
   const { tests: cases } = YAML.parse(fs.readFileSync(testPath, "utf-8")) as { tests: TestCase[] };
-  const policy = Policy.from(loadPolicyDef(rawYaml));
+  const policy = Policy.from(loadPolicyDef(rawYaml), customConditions);
 
   test.each(cases)("resolves test case: $name", (testCase) => {
-    expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected);
+    expect(policy.can(actionArgFor(testCase), subjectArgFor(testCase))).toBe(testCase.expected);
   });
 });

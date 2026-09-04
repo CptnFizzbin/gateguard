@@ -1,96 +1,125 @@
-import { Condition, CustomConditionChecker } from "./Condition";
+import {Condition} from "./Condition";
+import {Operator} from "./operators/operator";
+import {DefaultOperators} from "./operators/defaultOperators";
+import {hasField} from "./operators/field/fieldAccess";
+import {JsonValue} from "../lib/json";
+import {PolicyLoadException} from "../errors";
 
+/** Every operator name {@link ConditionResolver} understands out of the box - the single source of truth for "is this name built-in". */
+export const BUILTIN_OPERATOR_NAMES: ReadonlySet<string> = new Set(DefaultOperators.map((op) => op.name));
+
+/**
+ * Implements SPEC_V1-0-0.md §7: the condition language and its
+ * evaluation semantics. Every operator's own behavior lives in
+ * `./operators/**` - this class is just the dispatch loop: it looks a
+ * `$`-prefixed key up in its registry (built-ins plus whatever custom
+ * `Operator`s the caller registered) and delegates, or narrows into a
+ * bare field name.
+ */
 export class ConditionResolver {
-  private customCheckers: CustomConditionChecker = {};
+  private operatorRegistry = new Map<string, Operator>
 
-  constructor(customCheckers?: CustomConditionChecker) {
-    if (customCheckers) {
-      this.customCheckers = customCheckers;
+  /**
+   * @param operators custom operators to register alongside the built-ins
+   *   (§7.4.12) - built-in and custom operators share this one array-based
+   *   entry point. Constructing this with a name collision (a custom
+   *   operator sharing a `$name` with a built-in, or with another operator
+   *   in `operators`) MUST throw a {@link PolicyLoadException} immediately
+   *   - never a silent overwrite (SPEC_V1-0-0.md §3.2.3, EC-16).
+   */
+  constructor(operators: Operator[] = []) {
+    for (const operator of DefaultOperators) {
+      this.operatorRegistry.set(operator.name, operator)
+    }
+    for (const operator of operators) {
+      if (this.operatorRegistry.has(operator.name)) {
+        throw new PolicyLoadException(
+          `Duplicate operator "${operator.name}": an operator with this name is already registered (built-in or custom) - operator names MUST be unique (SPEC_V1-0-0.md §3.2.3, EC-16).`
+        );
+      }
+      this.operatorRegistry.set(operator.name, operator)
+    }
+  }
+
+  /**
+   * §3.2.3, EC-15 (promoted): throws if any name in `names` isn't
+   * registered on this resolver - built-in or custom. Used by `Policy` to
+   * enforce `meta.operators` registration coverage in full at construction
+   * time, regardless of whether any rule actually reaches a given operator
+   * during evaluation.
+   */
+  assertAllRegistered(names: Iterable<string>): void {
+    for (const name of names) {
+      if (!this.operatorRegistry.has(name)) {
+        throw new PolicyLoadException(
+          `meta.operators declares "${name}" but no operator with that name is registered (built-in or custom) (SPEC_V1-0-0.md §3.2.3, EC-15).`
+        );
+      }
     }
   }
 
   evaluate(subject: any, condition: Condition): boolean {
-    if (typeof condition === "string" || typeof condition === "number" || typeof condition === "boolean" || condition === null) {
-      return subject === condition;
+    if (
+      typeof condition === "string" ||
+      typeof condition === "number" ||
+      typeof condition === "boolean" ||
+      condition === null
+    ) {
+      condition = {$eq: condition}
     }
 
-    if (!condition || typeof condition !== "object") {
+    if (typeof condition !== "object") {
       return false;
     }
 
-    const obj = condition as Record<string, any>;
-
-    if ("$eq" in obj) {
-      return subject === obj.$eq;
-    }
-
-    if ("$ne" in obj) {
-      return subject !== obj.$ne;
-    }
-
-    if ("$gt" in obj) {
-      return subject > obj.$gt;
-    }
-
-    if ("$gte" in obj) {
-      return subject >= obj.$gte;
-    }
-
-    if ("$lt" in obj) {
-      return subject < obj.$lt;
-    }
-
-    if ("$lte" in obj) {
-      return subject <= obj.$lte;
-    }
-
-    if ("$in" in obj && Array.isArray(obj.$in)) {
-      return obj.$in.includes(subject);
-    }
-
-    if ("$has" in obj) {
-      if (Array.isArray(subject)) {
-        return subject.includes(obj.$has);
-      }
-      return false;
-    }
-
-    if ("$rgx" in obj) {
-      const regex = typeof obj.$rgx === "string" ? new RegExp(obj.$rgx) : obj.$rgx;
-      return regex.test(String(subject));
-    }
-
-    if ("$or" in obj && Array.isArray(obj.$or)) {
-      return obj.$or.some((cond: Condition) => this.evaluate(subject, cond));
-    }
-
-    if ("$and" in obj && Array.isArray(obj.$and)) {
-      return obj.$and.every((cond: Condition) => this.evaluate(subject, cond));
-    }
-
-    if ("$not" in obj) {
-      return !this.evaluate(subject, obj.$not);
-    }
-
-    // Handle field conditions
-    for (const [key, value] of Object.entries(obj)) {
-      if (key.startsWith("$")) {
-        if (this.customCheckers[key]) {
-          if (!this.customCheckers[key](subject, value)) {
-            return false;
-          }
-        } else {
-          return false;
-        }
-      } else if (subject && typeof subject === "object" && key in subject) {
-        if (!this.evaluate(subject[key], value)) {
-          return false;
-        }
-      } else {
+    // §7.5: every key MUST be evaluated and ANDed together - no key may
+    // "consume" the whole object or cause sibling keys to be ignored.
+    for (const [key, value] of Object.entries(condition)) {
+      if (!this.evaluateKey(subject, key, value)) {
         return false;
       }
     }
 
     return true;
+  }
+
+  /**
+   * §7.4.12, §7.5: any key starting with "$" is an operator lookup, never
+   * a field name - built-in and custom operators are both resolved the
+   * same way, by name, against the same registry.
+   */
+  private evaluateKey(subject: unknown, key: string, value: JsonValue): boolean {
+    if (!key.startsWith("$")) {
+      return this.fieldCheck(subject, key, value);
+    }
+
+    const operator = this.operatorRegistry.get(key)
+    if (!operator) {
+      // §7.4.12, EC-13: an operator with no checker registered (built-in or
+      // custom) MUST evaluate to false - never a no-op true, and never
+      // treated as a field name, and never itself a required §7.1
+      // diagnostic (an unrecognized name is ordinary unmatched vocabulary,
+      // not a type issue). A cataloged-but-unregistered name (EC-15) can no
+      // longer even reach this branch: `Policy` now enforces meta.operators
+      // registration in full at construction time, so any name still
+      // unregistered here was never cataloged.
+      return false;
+    }
+
+    return operator.resolve(
+      subject,
+      value,
+      {
+        resolveSubcondition: (
+          subject: unknown,
+          condition: Condition
+        ) => this.evaluate(subject, condition)
+      }
+    )
+  }
+
+  /** §7.4.10, §7.3: a missing field (or a non-object subject) makes the whole field-condition false - absence, not a type issue. */
+  private fieldCheck(subject: unknown, fieldName: string, condition: Condition): boolean {
+    return hasField(subject, fieldName) && this.evaluate(subject[fieldName], condition);
   }
 }
