@@ -1,5 +1,8 @@
-import { createAction, createSubject, PolicyBuilder, Policy } from "./index";
-import type { InferActions, InferSubjects } from "./index";
+import type {InferActions, InferSubjects} from "./index";
+import {createAction, createSubject, Policy, PolicyBuilder} from "./index";
+import {getLogger} from "./lib/logger";
+
+const logger = getLogger()
 
 // Define your action types
 const Actions = {
@@ -23,28 +26,28 @@ type AppSubjects = InferSubjects<typeof Subjects>;
 const policyDef = new PolicyBuilder<AppActions, AppSubjects>()
   .allow(Actions.Create, Subjects.Article)
   .allow(Actions.Read, Subjects.Article)
-  .allow(Actions.Update, Subjects.Article, { owner_id: 1 })
-  .deny(Actions.Delete, Subjects.Article, { status: { $not: "archived" } })
+  .allow(Actions.Update, Subjects.Article, {owner_id: 1})
+  .deny(Actions.Delete, Subjects.Article, {status: {$not: "archived"}})
   .buildDef();
 
 // Create a policy instance
 const policy = new Policy<AppActions, AppSubjects>(policyDef);
 
 // Type-safe permission checks
-const article = Subjects.Article.wrap({ id: 1, owner_id: 1, status: "published" });
+const article = Subjects.Article.wrap({id: 1, owner_id: 1, status: "published"});
 
 if (policy.can(Actions.Create, Subjects.Article)) {
-  console.log("✓ Can create articles");
+  logger.info("✓ Can create articles");
 }
 
 if (policy.can(Actions.Update, article)) {
-  console.log("✓ Can update own article");
+  logger.info("✓ Can update own article");
 }
 
 if (policy.can(Actions.Delete, article)) {
-  console.log("✓ Can delete article");
+  logger.info("✓ Can delete article");
 } else {
-  console.log("✗ Cannot delete non-archived article");
+  logger.info("✗ Cannot delete non-archived article");
 }
 
 // Type safety: these would be caught at compile time

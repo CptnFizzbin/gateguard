@@ -9,8 +9,7 @@ GateGuard Spec
 > [`GLOSSARY.md`](GLOSSARY.md). For the normative v1 specification — exact
 > rule-evaluation semantics, the full condition-operator table, and a
 > catalogue of required edge-case behavior — see
-> [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md). Known gaps between that spec and the
-> current implementations are tracked in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
+> [`SPEC_V1-0-0.md`](SPEC_V1-0-0.md).
 
 See [`GLOSSARY.md`](GLOSSARY.md) for definitions of Claims, Action,
 Subject, PolicyBuilder, Rule, PolicyDefinition, and Policy.
@@ -66,7 +65,7 @@ Condition =
   | LteCondition = { $lte: TValue } //=> TSubject <= TValue
   | InCondition = { $in: TValue[] } //=> TValue[].contains(TSubject)
   | HasCondition = { $has: TValue } //=> TSubject[].contains(TValue)
-  | SubstrCondition = { $substr: TValue } //=> a small non-regex pattern language matches TSubject
+  | SubstrOperator = { $substr: TValue } //=> a small non-regex pattern language matches TSubject
   | OrCondition = { $or: Condition[] } //=> Condition[].any(TSubject)
   | AndCondition = { $and: Condition[] } //=> Condition[].all(TSubject)
   | NotCondition = { $not: Condition } //=> !Condition(TSubject)
