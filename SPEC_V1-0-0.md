@@ -436,6 +436,18 @@ action/subject that simply doesn't match any rule, or an unregistered custom
 `$op` not covered by a declared catalog (§7.4.12, EC-13) are not malformed
 input, so they **MUST NOT** produce a console diagnostic on their own.
 
+Implementations **MAY** go further than the per-call diagnostic above:
+at construction time, before any rule is ever evaluated, an implementation
+**MAY** eagerly walk every rule's `Conditions` looking for the same
+structurally-invalid shapes that would otherwise surface as a type issue at
+evaluation time (a non-array `$in`/`$has`/`$or`/`$and` operand, a malformed
+`$substr` pattern, a malformed `$field` tuple, etc.) and throw a
+`PolicyLoadException` immediately upon finding one, rather than waiting for
+evaluation to reach the offending rule. This eager check is optional; an
+implementation that doesn't perform it **MUST** still honor the
+evaluation-time diagnose-then-`false` behavior above for whatever invalid
+conditions it didn't catch eagerly.
+
 ### 7.2 Bare-value shorthand
 
 A condition that is itself a string, number, boolean, or `null` (not wrapped in
@@ -692,10 +704,10 @@ implementing its own `$and`-like combinator) exactly the way the built-in
 - When `meta.operators` either isn't declared or doesn't list
   `$op`, an unregistered `$op` is not itself a type issue (§7.1) — an
   unrecognized operator name is a different mistake than a recognized operator
-  given the wrong operand type — so it **MUST NOT** require the console
-  diagnostic, though an implementation **MAY** still choose to log one (as a
-  nicety, not a requirement) to make a typo like `$eqq` easier to notice. See
-  EC-13.
+  given the wrong operand type — so this case is exempt from the §7.1
+  diagnostic *requirement*. Implementations **SHOULD** still log a
+  diagnostic warning that an unregistered operator was called, so a typo like
+  `$eqq` is easy to notice. See EC-13.
 - When `$op` *is* listed in `meta.operators`, `Policy.from(...)` already
   validated - at construction, before any rule is ever evaluated - both that
   every rule using it references a cataloged name (§3, EC-13) *and* that an
