@@ -1,55 +1,52 @@
 # Open Questions — v1 Spec
 
-Items raised during spec review that need a decision before being folded
-back into `SPEC_V1-0-0.md` (or explicitly rejected).
+Items raised during spec review that needed a decision before being folded
+back into `SPEC_V1-0-0.md` (or explicitly rejected). Resolved items are kept
+here as a record of the decision and where it landed in the spec.
 
-## 1. Should `$ne` treat a missing field as a match (`true`), same as explicit `null`?
+## 1. RESOLVED — Should `$ne` treat a missing field as a match (`true`), same as explicit `null`?
 
-Current spec (§7.3) requires a **missing field** to make the entire
-field-condition evaluate to `false`, regardless of the nested operator —
-e.g. `{status: {$ne: "archived"}}` against a subject with no `status` key
-is `false`, not `true`. The spec gives an explicit rationale: "not
-archived" requires a `status` that is present and isn't `"archived"`, not
-the absence of a `status`.
+Previously, §7.3 made a **missing field** evaluate the entire field-condition
+to `false` regardless of the nested operator, with `{status: {$ne: "archived"}}`
+against a subject with no `status` key given as an explicit example of `false`.
+That was in tension with §7.4.2's own requirement that `$ne` **MUST** be the
+exact negation of `$eq` for the same subject/value pair — since `$eq` on a
+missing field is `false`, `$ne` should have been `true` by that contract.
 
-By contrast, an **explicit `null`** value is compared normally: since
-`$ne` is the exact negation of `$eq` (value equality), `null !== "archived"`
-is `true`, so `{status: {$ne: "archived"}}` matches when `status` is
-explicitly `null`.
+**Decision:** `$ne` is the exact negation of `$eq`, including on a missing
+field — a missing field genuinely isn't equal to anything, so `$ne` on it
+evaluates to `true`. Every other operator (`$eq` itself, `$gt`, `$in`, `$has`,
+`$substr`, ...) keeps the blanket `false`, since only `$ne` is specified as an
+exact negation of another operator. Landed in §7.3 and §7.4.2.
 
-Raised question: should `$ne` (and possibly other operators) be changed so
-that a *missing* field is also treated as an automatic match/`true`,
-collapsing the missing-vs-null distinction for `$ne` specifically? This
-would be a behavioral change from the currently-documented (and
-conformance-tested) semantics in §7.3, not just a clarification.
+**Follow-up worth a look:** `$not` (§7.4.9) has the same "MUST be the exact
+negation of evaluating `Condition`" contract as `$ne`, so the same tension
+technically applies to it too — e.g. does `{ status: { $not: { $eq: "archived" } } }`
+on a missing `status` also become `true`, by the same reasoning? This
+decision was scoped to `$ne` specifically (the case actually raised); `$not`
+was not addressed and still follows the general missing-field-is-`false` rule
+as written. Flag if that should be revisited.
 
-Needs a decision: keep current behavior, or amend §7.3/§7.4.2 to special-case
-`$ne` (and decide whether that special-casing should extend to other
-operators too).
+## 2. RESOLVED — Should `meta.operators` catalog-completeness enforcement be a MUST or a SHOULD-with-opt-out?
 
-## 2. Should `meta.operators` catalog-completeness enforcement be a MUST or a SHOULD-with-opt-out?
+Previously, §3.2.3/EC-13 made it an unconditional MUST: whenever `meta.operators`
+is declared, construction had to throw if any rule's condition referenced a
+custom `$op` not listed in the catalog — same enforcement tier as
+`meta.actions`/`meta.subjects` (EC-8).
 
-Current spec (§3.2.3, EC-13) makes this unconditional: when `meta.operators`
-is declared, `Policy.from(...)` **MUST** throw a `PolicyLoadException` at
-construction if any rule's condition uses a custom `$op` not listed in the
-catalog — the same enforcement tier as `meta.actions`/`meta.subjects`
-(EC-8). There's no opt-out; this is different from `$op`s referenced when
-`meta.operators` isn't declared at all (or doesn't mention that name),
-which is a separate, already-settled case (§7.4.12: evaluates to `false`
-at runtime, no construction-time check applies since there's no catalog to
-violate).
+**Decision:** split into two different obligations, at two different
+strengths:
 
-Raised expectation: this eager catalog-completeness walk should be a
-**SHOULD**, not a MUST, with room for an implementation (or a developer,
-explicitly) to skip it — e.g. when a policy has enough complex/nested
-conditions that eagerly walking all of them at construction is costly, or
-when a developer deliberately opts out for other reasons. This would
-mirror the pattern §2 already uses for MINOR-version checking:
-*"Implementations MAY provide an option to disable MINOR version
-verification... but this MUST be an explicit opt-in; the default behavior
-is the MINOR check above."* — i.e. the default stays strict, but a named,
-explicit opt-out exists.
+- **Registration check** (EC-15) — for every name listed in `meta.operators`,
+  an operator implementation **MUST** actually be registered on the
+  `Policy`/`ConditionResolver` instance, checked unconditionally at
+  construction. Unchanged — this was already a MUST and stays one.
+- **Deep condition-tree validation** (EC-13) — walking every rule's
+  `Conditions` to confirm every custom `$op` referenced anywhere is listed in
+  `meta.operators` — is now a **SHOULD**, not a MUST. An implementation MAY
+  skip this walk (or expose skipping it as an explicit opt-out) since it can
+  be costly over many/deeply-nested conditions. Skipping it has no effect on
+  evaluation-time behavior: an uncataloged `$op` a rule actually reaches
+  still resolves to `false` per §7.4.12 either way.
 
-Needs a decision: keep the current unconditional MUST (uniform validation,
-no escape hatch), or amend §3.2.3/EC-13 to add an explicit, default-on
-opt-out mechanism the same shape as §2's MINOR-version-check opt-out.
+Landed in §3.2.3, §7.4.12, and EC-13.
