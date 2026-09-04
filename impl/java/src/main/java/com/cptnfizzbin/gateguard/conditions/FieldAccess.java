@@ -42,8 +42,12 @@ final class FieldAccess {
      * SPEC_V1-0-0.md §7.3's `$ne`-on-a-missing-field carve-out is narrow: it
      * only fires when `$ne` is itself the sole nested condition being
      * evaluated at the missing field, not when it's one key among several
-     * in a multi-key condition object (§7.5) or nested deeper (e.g. inside
-     * `$not`) - see OPEN_QUESTIONS.md #1.
+     * in a multi-key condition object (§7.5) or nested deeper -
+     * {@code { status: { $not: { $eq: "archived" } } } } on a missing
+     * {@code status} still gets the blanket {@code false}, unlike a bare
+     * {@code { status: { $ne: "archived" } } }, even though {@code $not}
+     * has the same "exact negation" contract {@code $ne} does (§7.4.9).
+     * Undecided whether that should change; not addressed here.
      */
     private static boolean isBareNe(Object condition) {
         return condition instanceof Map && ((Map<?, ?>) condition).keySet().equals(Set.of("$ne"));

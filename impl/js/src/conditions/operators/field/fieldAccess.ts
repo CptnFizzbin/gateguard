@@ -18,7 +18,11 @@ export function hasField(subject: unknown, fieldName: string): subject is Record
  * unlike every other operator, which keeps the blanket `false`. Narrow by
  * design: only fires when `$ne` is itself the sole nested condition, not
  * when it's one key among several in a multi-key condition object (§7.5)
- * or nested deeper (e.g. inside `$not`) - see OPEN_QUESTIONS.md #1.
+ * or nested deeper - `{ status: { $not: { $eq: "archived" } } }` on a
+ * missing `status` still gets the blanket `false`, unlike a bare
+ * `{ status: { $ne: "archived" } }`, even though `$not` has the same
+ * "exact negation" contract `$ne` does (§7.4.9). Undecided whether that
+ * should change; not addressed here.
  */
 export function isBareNe(condition: Condition): boolean {
   return (
