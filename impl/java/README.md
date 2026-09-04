@@ -18,14 +18,14 @@ Add to your `pom.xml`:
 <dependency>
     <groupId>com.cptnfizzbin</groupId>
     <artifactId>keycard</artifactId>
-    <version>0.1.0</version>
+    <version>0.0.1</version>
 </dependency>
 ```
 
 Or with Gradle:
 
 ```gradle
-implementation 'com.cptnfizzbin:keycard:0.1.0'
+implementation 'com.cptnfizzbin:keycard:0.0.1'
 ```
 
 ## Quick Start
