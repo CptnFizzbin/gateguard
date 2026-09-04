@@ -1,6 +1,6 @@
 import {createOperator} from "../operator";
 import {PolicyTypeMismatchError} from "../../../errors/PolicyTypeMismatchError";
-import {hasField} from "./fieldAccess";
+import {hasField, isBareNe} from "./fieldAccess";
 
 /**
  * §7.4.11: `$field` - explicit field access, equivalent to the bare-key
@@ -17,5 +17,5 @@ export const FieldOperator = createOperator("$field", (subject, operand, {resolv
   }
 
   const [fieldName, condition] = operand;
-  return hasField(subject, fieldName) && resolveSubcondition(subject[fieldName], condition);
+  return hasField(subject, fieldName) ? resolveSubcondition(subject[fieldName], condition) : isBareNe(condition);
 })

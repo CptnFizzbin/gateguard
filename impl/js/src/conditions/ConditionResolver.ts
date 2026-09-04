@@ -1,7 +1,7 @@
 import {Condition} from "./Condition";
 import {Operator} from "./operators/operator";
 import {DefaultOperators} from "./operators/defaultOperators";
-import {hasField} from "./operators/field/fieldAccess";
+import {hasField, isBareNe} from "./operators/field/fieldAccess";
 import {JsonValue} from "../lib/json";
 import {PolicyLoadException} from "../errors";
 
@@ -118,8 +118,13 @@ export class ConditionResolver {
     )
   }
 
-  /** §7.4.10, §7.3: a missing field (or a non-object subject) makes the whole field-condition false - absence, not a type issue. */
+  /**
+   * §7.4.10, §7.3: a missing field (or a non-object subject) makes the
+   * whole field-condition false - absence, not a type issue - with one
+   * exception: `$ne` (§7.4.2), which MUST evaluate to true on a missing
+   * field instead. See {@link isBareNe}.
+   */
   private fieldCheck(subject: unknown, fieldName: string, condition: Condition): boolean {
-    return hasField(subject, fieldName) && this.evaluate(subject[fieldName], condition);
+    return hasField(subject, fieldName) ? this.evaluate(subject[fieldName], condition) : isBareNe(condition);
   }
 }
