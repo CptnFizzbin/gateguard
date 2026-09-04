@@ -2,8 +2,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as YAML from "yaml";
 import { describe, test, expect } from "vitest";
-import { Policy, PolicyDefinition } from "../../src";
-import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
+import { createOperator, Operator, Policy, PolicyDefinition } from "../../src";
+import { GATEGUARD_POLICY_VERSION } from "../../src/version";
+import { listYamlFiles, actionArgFor, subjectArgFor, isIncluded } from "./complianceFixtures";
 
 /**
  * Reads the v1 conformance suite under test/fixtures/v1 (see the README
@@ -12,20 +13,10 @@ import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
  * `---`-separated documents; each document is one self-contained
  * `{ name, rules, cases }` test suite in the v1 `PolicyDefinition` shape.
  *
- * `impl/js` has not been migrated to the v1 `rules`/`meta` schema yet (see
- * KNOWN_ISSUES.md): its `PolicyDefinition` is still the pre-v1
- * `{ allow: [...], deny: [...] }` shape, driven by an "allow AND NOT deny"
- * check rather than v1's reverse-scan last-rule-wins, and its wildcard
- * token is hardcoded to `"*"` rather than reading `meta.anyAction`/
- * `meta.anySubject`. `toLegacyDefinition` below is a best-effort adapter
- * that reshapes a v1 definition into that pre-v1 shape so this suite can
- * still exercise the current implementation - it does not attempt to
- * emulate last-rule-wins, wildcard tokens, or `meta` catalogs. Cases that
- * depend on that v1-only behavior are therefore EXPECTED TO FAIL against
- * the current implementation; that gap is what this suite exists to make
- * visible, not a defect in the fixtures. Once `impl/js` adopts the v1
- * schema natively, this adapter should be replaced with passing the parsed
- * definition straight through.
+ * impl/js now natively implements the v1 `rules`/`meta` schema (see
+ * ../../src/policy/PolicyDefinition.ts), so each parsed suite is a
+ * PolicyDefinition already and is handed straight to `Policy.from(...)` -
+ * no adapter needed.
  *
  * Discovery, subject-argument construction, and version filtering are
  * shared with every other compliance suite via ./complianceFixtures - see
@@ -36,16 +27,18 @@ import { listYamlFiles, subjectArgFor, isIncluded } from "./complianceFixtures";
 const FIXTURES_DIR = path.join(__dirname, "../../../../test/fixtures/v1");
 
 /**
- * The highest v1 SemVer this suite's adapter (toLegacyDefinition below) is
- * written against. Baked into the suite itself - rather than left to
- * whatever an external default happens to be - so "which version this runs
- * compliant with" is a property of the code: bump it only once the adapter
- * has actually been updated to handle whatever a newer MINOR version's
- * fixtures add, not merely because such fixtures exist.
+ * The highest v1 SemVer this suite (and the `Policy` implementation it
+ * exercises) is written against - single-sourced from
+ * GATEGUARD_POLICY_VERSION alongside `Policy`'s internal
+ * SUPPORTED_VERSION and `PolicyBuilder`'s BUILDER_VERSION, rather than a
+ * separately hand-maintained literal, so "which version this runs
+ * compliant with" can't quietly drift from what the implementation
+ * actually supports. Should the two ever need to diverge (this suite's
+ * adapter lagging a MINOR bump the rest of the implementation has already
+ * picked up), replace this reference with an explicit, separately-tracked
+ * literal.
  */
-const COMPLIANT_VERSION = "1.0.0";
-
-type V1Rule = [string, string, string, Record<string, unknown>?];
+const COMPLIANT_VERSION = GATEGUARD_POLICY_VERSION;
 
 interface V1Case {
   name?: string;
@@ -55,12 +48,9 @@ interface V1Case {
   expected: "allow" | "deny";
 }
 
-interface V1Suite {
-  version: string;
+interface V1Suite extends PolicyDefinition {
   name: string;
   description?: string;
-  meta?: Record<string, unknown>;
-  rules: V1Rule[];
   cases: V1Case[];
 }
 
@@ -73,36 +63,26 @@ function discoverFixtureFiles(): FixtureFile[] {
   return listYamlFiles(FIXTURES_DIR).map((filePath) => ({ fileName: path.basename(filePath), filePath }));
 }
 
+/**
+ * Some v1 conformance suites exercise a custom condition operator, which -
+ * per SPEC_V1-0-0.md §7.4.12 - only the host application (here, this test
+ * suite) can implement; declaring it in meta.operators documents it but
+ * doesn't wire up behavior. Keyed by fixture file name.
+ */
+const CUSTOM_OPERATORS: Record<string, Operator[]> = {
+  "11-worked-example.yaml": [
+    // Mirrors the spec Appendix's own suggested implementation: "one that
+    // checks subject.roles.includes('admin')".
+    createOperator("$hasRole", (subject, value) => {
+      const roles = subject && typeof subject === "object" ? (subject as Record<string, unknown>).roles : undefined;
+      return Array.isArray(roles) && roles.includes(value);
+    }),
+  ],
+};
+
 function loadSuites(filePath: string): V1Suite[] {
   const raw = fs.readFileSync(filePath, "utf-8");
   return YAML.parseAllDocuments(raw).map((doc) => doc.toJSON() as V1Suite);
-}
-
-/**
- * Reshapes a v1 `{ rules: [[effect, action, subject, conditions?], ...] }`
- * definition into the pre-v1 `{ rules: { allow: [...], deny: [...] } }`
- * shape `impl/js` currently expects, preserving each bucket's relative
- * order (cross-bucket ordering - the part last-rule-wins actually needs -
- * can't be preserved by this split, which is exactly the gap this suite is
- * meant to surface).
- */
-function toLegacyDefinition(suite: V1Suite): PolicyDefinition {
-  const allow: PolicyDefinition["rules"]["allow"] = [];
-  const deny: PolicyDefinition["rules"]["deny"] = [];
-
-  for (const [effect, action, subject, conditions] of suite.rules) {
-    const tuple: [string, string, Record<string, unknown>?] = conditions
-      ? [action, subject, conditions]
-      : [action, subject];
-    (effect === "allow" ? allow : deny).push(tuple);
-  }
-
-  return {
-    version: 1,
-    name: suite.name,
-    description: suite.description,
-    rules: { allow, deny },
-  };
 }
 
 const fixtureFiles = discoverFixtureFiles();
@@ -111,8 +91,9 @@ test("discovers at least one v1 conformance fixture file", () => {
   expect(fixtureFiles.length).toBeGreaterThan(0);
 });
 
-describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) => {
+describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ fileName, filePath }) => {
   const suites = loadSuites(filePath);
+  const operators = CUSTOM_OPERATORS[fileName] ?? [];
 
   test("every document in the file is a well-formed suite", () => {
     for (const suite of suites) {
@@ -127,14 +108,14 @@ describe.each(fixtureFiles)("v1 conformance fixture: $fileName", ({ filePath }) 
     // exceeds this suite's own baked-in COMPLIANT_VERSION - see
     // complianceFixtures.ts's isIncluded.
     describe.skipIf(!isIncluded(suite.version, COMPLIANT_VERSION))(`version ${suite.version}`, () => {
-      const policy = Policy.from(toLegacyDefinition(suite));
+      const policy = Policy.from(suite, operators);
       const cases = suite.cases.map((c) => ({
         ...c,
         name: c.name ?? `${c.action} / ${c.subject} -> ${c.expected}`,
       }));
 
       test.each(cases)("$name", (testCase) => {
-        expect(policy.can(testCase.action, subjectArgFor(testCase))).toBe(testCase.expected === "allow");
+        expect(policy.can(actionArgFor(testCase), subjectArgFor(testCase))).toBe(testCase.expected === "allow");
       });
     });
   });

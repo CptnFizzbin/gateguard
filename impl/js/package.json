@@ -2,6 +2,7 @@
   "name": "@cptnfizzbin/gateguard",
   "version": "0.1.0",
   "description": "TypeScript access control library, strongly inspired by CASL.js",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -18,13 +19,18 @@
   ],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "semver": "^7.8.5"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/semver": "^7.8.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/ui": "^4.1.11",
     "eslint": "^8.50.0",
-    "typescript": "^5.2.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.0",
+    "typescript-7": "npm:typescript@^7.0.0",
     "vitest": "^4.1.11",
     "yaml": "^2.9.0"
   },

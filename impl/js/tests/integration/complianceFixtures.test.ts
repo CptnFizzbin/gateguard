@@ -4,6 +4,7 @@ import {
   parseSemVer,
   isCompatible,
   isIncluded,
+  actionArgFor,
   subjectArgFor,
   listYamlFiles,
   MAX_VERSION_ENV_VAR,
@@ -71,16 +72,23 @@ describe("isIncluded", () => {
   });
 });
 
+describe("actionArgFor", () => {
+  test("wraps the raw action name into an Action", () => {
+    expect(actionArgFor({ action: "Delete" })).toEqual({ name: "Delete", __brand: "action" });
+  });
+});
+
 describe("subjectArgFor", () => {
-  test("a bare subject name with no instance data", () => {
-    expect(subjectArgFor({ subject: "Article" })).toBe("Article");
+  test("a bare Subject with no instance data", () => {
+    const subject = subjectArgFor({ subject: "Article" });
+    expect(subject.name).toBe("Article");
+    expect(subject.instance).toBeUndefined();
   });
 
-  test("an instance is tagged with __name for Policy.can to key off of", () => {
-    expect(subjectArgFor({ subject: "Article", subjectData: { owner_id: 1 } })).toEqual({
-      owner_id: 1,
-      __name: "Article",
-    });
+  test("an instance is wrapped for Policy.can to key off of", () => {
+    const subject = subjectArgFor({ subject: "Article", subjectData: { owner_id: 1 } });
+    expect(subject.name).toBe("Article");
+    expect(subject.instance).toEqual({ owner_id: 1 });
   });
 });
 

@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { Action, Subject, createAction, createSubject } from "../../src";
 
 /**
  * Shared helpers for every compliance-fixture-driven integration suite -
@@ -21,7 +22,7 @@ export interface ComplianceCase {
   subjectData?: Record<string, unknown>;
 }
 
-/** `*.yaml` files directly under `dir` for which `filter` holds (default: all of them), sorted by name. */
+/** `*.yaml` files directly under `dir` for which `filter` holds (operators: all of them), sorted by name. */
 export function listYamlFiles(dir: string, filter: (fileName: string) => boolean = () => true): string[] {
   return fs
     .readdirSync(dir)
@@ -30,14 +31,19 @@ export function listYamlFiles(dir: string, filter: (fileName: string) => boolean
     .map((f) => path.join(dir, f));
 }
 
+/** The action argument every fixture-driven suite passes to `Policy.can`. */
+export function actionArgFor(testCase: { action: string }): Action {
+  return createAction(testCase.action);
+}
+
 /**
  * The subject argument every fixture-driven suite passes to `Policy.can`:
- * a bare subject name when there's no instance data (a `SubjectDef`-style,
- * EC-7/EC-9 check), or a `{ ...subjectData, __name: subject }` map
- * (mirroring a `SubjectRef`) when there is.
+ * a bare Subject (no instance) when there's no instance data (EC-7/EC-9),
+ * or one wrapping `subjectData` as its instance when there is.
  */
-export function subjectArgFor(testCase: ComplianceCase): unknown {
-  return testCase.subjectData ? { ...testCase.subjectData, __name: testCase.subject } : testCase.subject;
+export function subjectArgFor(testCase: ComplianceCase): Subject {
+  const subject = createSubject(testCase.subject);
+  return testCase.subjectData ? subject.wrap(testCase.subjectData) : subject;
 }
 
 /** A parsed MAJOR.MINOR.PATCH SemVer string, per SPEC_V1-0-0.md §2. */
@@ -81,7 +87,7 @@ export const MAX_VERSION_ENV_VAR = "GATEGUARD_FIXTURES_MAX_VERSION";
  * rather than defaulting to "run everything", so a suite whose adapter
  * hasn't caught up to a newer MINOR version's fixtures skips them
  * automatically, with no external configuration required;
- * `MAX_VERSION_ENV_VAR` overrides that baked-in default when set.
+ * `MAX_VERSION_ENV_VAR` overrides that baked-in operators when set.
  */
 export function isIncluded(fixtureVersion: string, compliantVersion: string): boolean {
   const override = process.env[MAX_VERSION_ENV_VAR];
