@@ -25,11 +25,12 @@ cases:
 
 ---
 version: "1.0.0"
-name: "missing field is not the same as explicit null (§7.3), via $ne"
+name: "$ne is the exact negation of $eq, including on a missing field (§7.3, §7.4.2)"
 description: >
-  { status: { $ne: archived } } requires a status that is present and isn't
-  "archived" - a missing status is absence, not "not archived", and MUST be
-  false.
+  { status: { $ne: archived } } matches whenever status isn't "archived" -
+  including when status is missing entirely, since $ne MUST be the exact
+  negation of $eq (§7.4.2) and $eq on a missing field is false. This is the
+  one exception to §7.3's blanket missing-field-is-false rule.
 rules:
   - [allow, Read, Article, { status: { $ne: archived } }]
 
@@ -46,11 +47,11 @@ cases:
     subject: Article
     expected: deny
 
-  - name: "field missing entirely: denied, not allowed, despite not literally being archived"
+  - name: "field missing entirely: allowed - $ne's exact-negation-of-$eq contract applies to absence too"
     subjectData: {}
     action: Read
     subject: Article
-    expected: deny
+    expected: allow
 
   - name: "explicit null is a real value, and null !== archived, so this is allowed"
     subjectData: { status: null }

@@ -178,11 +178,20 @@ a policy's rules actually use (e.g. when a tool regenerates or re-serializes a
 #### 3.2.3 `meta.operators`
 
 A declarative catalog of the custom `$`-prefixed condition operator names (e. g.
-`"$hasRole"`) this policy's rules use, enforced the same way as `meta.actions`/
-`meta.subjects` above when declared: a rule referencing a `$op` not listed here
-**MUST** throw a `PolicyLoadException` at construction (§7.4.12, EC-13).
-Declaring an operator here does not implement it - `PolicyDefinition` is JSON
-encodeable and cannot carry an executable checker.
+`"$hasRole"`) this policy's rules use. When declared, implementations
+**SHOULD** walk every rule's `Conditions` at construction and throw a
+`PolicyLoadException` immediately if some rule references a custom `$op` not
+listed here (§7.4.12, EC-13). Unlike `meta.actions`/`meta.subjects`
+(§3.2.2's enforcement of a rule's own top-level action/subject, which
+**MUST** be checked — that's a cheap, shallow check against two fields per
+rule), this is a **SHOULD**: eagerly walking every condition tree of every
+rule can be costly for a policy with many, deeply-nested conditions, so an
+implementation **MAY** skip this check — or expose skipping it as an
+explicit opt-out — without becoming non-conformant. Skipping it changes
+nothing at evaluation time: a `$op` a rule actually reaches that isn't
+registered still resolves to `false` per §7.4.12, whether or not this eager
+check ran. Declaring an operator here does not implement it - `PolicyDefinition`
+is JSON encodeable and cannot carry an executable checker.
 
 The operator's behavior must be supplied separately by the host application,
 through whatever runtime operator-registration mechanism the implementation
@@ -436,6 +445,18 @@ action/subject that simply doesn't match any rule, or an unregistered custom
 `$op` not covered by a declared catalog (§7.4.12, EC-13) are not malformed
 input, so they **MUST NOT** produce a console diagnostic on their own.
 
+Implementations **MAY** go further than the per-call diagnostic above:
+at construction time, before any rule is ever evaluated, an implementation
+**MAY** eagerly walk every rule's `Conditions` looking for the same
+structurally-invalid shapes that would otherwise surface as a type issue at
+evaluation time (a non-array `$in`/`$has`/`$or`/`$and` operand, a malformed
+`$substr` pattern, a malformed `$field` tuple, etc.) and throw a
+`PolicyLoadException` immediately upon finding one, rather than waiting for
+evaluation to reach the offending rule. This eager check is optional; an
+implementation that doesn't perform it **MUST** still honor the
+evaluation-time diagnose-then-`false` behavior above for whatever invalid
+conditions it didn't catch eagerly.
+
 ### 7.2 Bare-value shorthand
 
 A condition that is itself a string, number, boolean, or `null` (not wrapped in
@@ -452,10 +473,30 @@ These are two different things and **MUST** be distinguished:
 - **Missing field** — the subject is an object/map that does not have the key at
   all (or the subject isn't an object/map-like value in the first place). This
   makes the *entire field-condition* evaluate to `false`, regardless of which
-  operator is nested inside it. `{ status: { $ne: "archived" } }`
-  against a subject with no `status` key is `false`, not `true` — "not archived"
-  requires a `status` that is present and isn't `"archived"`, not the absence of
-  a `status`. This is absence, not a type issue — it **MUST NOT** trigger the
+  operator is nested inside it — **with one exception: `$ne` (§7.4.2)**.
+  Because `$ne` **MUST** be the exact negation of `$eq` for the same
+  subject/value pair, and a missing field makes `$eq` evaluate to `false`
+  (there being no value present to equal anything), `$ne` on a missing field
+  **MUST** evaluate to `true` instead — a missing `status` genuinely isn't
+  equal to `"archived"`. `{ status: { $eq: "archived" } }` against a subject
+  with no `status` key is `false`; `{ status: { $ne: "archived" } }` against
+  that same subject is `true`. Every other operator keeps the blanket
+  `false` (`$gt`, `$in`, `$has`, `$substr`, and so on aren't defined as an
+  exact negation of anything, so they aren't exempted). This exception is
+  narrow: it applies when `$ne` is itself the (sole) nested condition being
+  evaluated against the missing field, per §7.4.2 — it does **NOT** propagate
+  a "the field is missing" signal down into an arbitrary condition tree for
+  every operator to interpret on its own (that would leak the §7.1
+  diagnostic into `$gt`/`$in`/`$has`/`$substr` being handed a non-number/
+  non-array `undefined`, which §7.1's missing-field carve-out explicitly
+  forbids). A `$ne` that is one key among several in a multi-key condition
+  object (§7.5) still benefits from this exception for its own key, but the
+  object as a whole is still ANDed with its sibling keys as normal — a
+  sibling field key nested one level deeper than the missing field (e.g.
+  `{ author: { $ne: null, name: "Alice" } }` against a subject with no
+  `author` at all) still hits the general missing-field-is-`false` rule for
+  that sibling, since there's no object there to narrow `name` out of.
+  Either way this is absence, not a type issue — it **MUST NOT** trigger the
   §7.1 console diagnostic.
 - **Explicit `null`** — the subject has the key, and its value is `null`. This
   is a real value and is compared like any other: `{ field: null }`
@@ -490,7 +531,10 @@ conditions, §7.4.10/§7.5).
 **Requirements:**
 
 - **MUST** be the exact negation of `$eq` (§7.4.1) for the same `subject`/
-  `value` pair.
+  `value` pair — including when the field being tested is missing (§7.3):
+  since a missing field makes `$eq` evaluate to `false`, `$ne` on a missing
+  field **MUST** evaluate to `true`, unlike every other operator, which
+  keeps §7.3's blanket `false`.
 - No notion of a type mismatch, same as `$eq`.
 
 #### 7.4.3 `$gt` / `$gte` / `$lt` / `$lte`
@@ -692,17 +736,20 @@ implementing its own `$and`-like combinator) exactly the way the built-in
 - When `meta.operators` either isn't declared or doesn't list
   `$op`, an unregistered `$op` is not itself a type issue (§7.1) — an
   unrecognized operator name is a different mistake than a recognized operator
-  given the wrong operand type — so it **MUST NOT** require the console
-  diagnostic, though an implementation **MAY** still choose to log one (as a
-  nicety, not a requirement) to make a typo like `$eqq` easier to notice. See
-  EC-13.
-- When `$op` *is* listed in `meta.operators`, `Policy.from(...)` already
-  validated - at construction, before any rule is ever evaluated - both that
-  every rule using it references a cataloged name (§3, EC-13) *and* that an
-  operator (built-in or custom) is actually registered for `$op` (EC-15). The
-  "cataloged but nothing registered" case this bullet previously described as
-  a runtime diagnostic therefore **cannot** arise during evaluation any
-  longer - it's a construction-time `PolicyLoadException` instead. See EC-15.
+  given the wrong operand type — so this case is exempt from the §7.1
+  diagnostic *requirement*. Implementations **SHOULD** still log a
+  diagnostic warning that an unregistered operator was called, so a typo like
+  `$eqq` is easy to notice. See EC-13.
+- When `$op` *is* listed in `meta.operators`, `Policy.from(...)` has already
+  validated - at construction, before any rule is ever evaluated - that an
+  operator (built-in or custom) is actually registered for `$op` (EC-15,
+  unconditional). The "cataloged but nothing registered" case this bullet
+  previously described as a runtime diagnostic therefore **cannot** arise
+  during evaluation - it's a construction-time `PolicyLoadException` instead.
+  See EC-15. (Whether a rule's own reference to `$op` was itself eagerly
+  checked against the catalog at construction is a separate question,
+  governed by EC-13's SHOULD-level deep-condition walk - §3.2.3 - and
+  doesn't affect this guarantee, which comes from EC-15 alone.)
 - Registering two operators - built-in and custom, or two custom operators -
   under the same `$name` on one instance is itself invalid; see EC-16.
 
@@ -873,9 +920,16 @@ A `$`-prefixed key that is neither a built-in operator (§7.4.1–§7.4.11)
 nor registered as a custom condition checker on that `Policy`/
 `ConditionResolver` instance evaluates to `false` (§7.4.12) — never a type issue
 on its own, never a no-op `true`. When `meta.operators`
-is declared, `Policy.from(...)` **MUST** throw a `PolicyLoadException` at
-construction if some rule uses a `$op` not listed there (§3) — the same
-enforcement as EC-8, applied to the custom-operator namespace. A
+is declared, `Policy.from(...)` **SHOULD** walk every rule's `Conditions` at
+construction and throw a `PolicyLoadException` if some rule uses a `$op` not
+listed there (§3) — unlike EC-8's `meta.actions`/`meta.subjects` enforcement
+(an unconditional MUST, since checking a rule's own top-level action/subject
+is a cheap, shallow check), this is a SHOULD: eagerly walking every condition
+tree in every rule can be costly for a policy with many complex conditions,
+so an implementation MAY skip this check, or expose it as an explicit
+opt-out, without becoming non-conformant. Skipping it has no effect at
+evaluation time — an uncataloged `$op` a rule actually reaches still resolves
+to `false` per the paragraph above, whether or not this eager check ran. A
 `meta.operators` entry that no rule uses is never an error.
 
 ### EC-14 — Reserved wildcard names are policy-scoped
